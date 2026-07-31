@@ -88,6 +88,7 @@ app.innerHTML = `
       <div class="progress-line"><span id="progress-label">Blush</span><div><i id="progress-fill"></i></div><b id="progress-value">0%</b></div>
       <nav id="tool-tray" class="tool-tray" aria-label="Makeup steps"></nav>
     </section>
+    <button id="final-close" class="final-close" type="button" aria-label="Choose another princess" title="Choose another princess">×</button>
   </main>
   <div id="tool-cursor" class="tool-cursor" aria-hidden="true"><img id="cursor-image" src="${ASSET_MANIFEST.tools.blush}" alt="" /></div>
 `
@@ -114,6 +115,7 @@ const progressLabel = document.querySelector<HTMLSpanElement>('#progress-label')
 const progressFill = document.querySelector<HTMLElement>('#progress-fill')!
 const progressValue = document.querySelector<HTMLElement>('#progress-value')!
 const toolTray = document.querySelector<HTMLElement>('#tool-tray')!
+const finalClose = document.querySelector<HTMLButtonElement>('#final-close')!
 
 const makeMask = () => {
   const canvas = document.createElement('canvas')
@@ -481,9 +483,7 @@ const renderCharacterPicker = () => {
 }
 
 const openCharacterPicker = () => {
-  clearHelperTimer()
-  isPainting = false
-  toolCursor.classList.remove('shown')
+  clearMakeupState()
   characterPicker.hidden = false
   gameShell.classList.remove('final-look')
   gameShell.classList.add('selecting')
@@ -564,5 +564,16 @@ characterGrid.addEventListener('click', (event) => {
 
 document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
 document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', openCharacterPicker)
+finalClose.addEventListener('click', openCharacterPicker)
+
+// Safari can turn a two-finger painting gesture into a page zoom.  The game has
+// no scrollable surface, so keep touch gestures inside the canvas and preserve
+// one-finger tapping/painting for the controls and portrait.
+document.addEventListener('touchmove', (event) => {
+  if (event.touches.length > 1) event.preventDefault()
+}, { passive: false })
+;(['gesturestart', 'gesturechange', 'gestureend'] as const).forEach((eventName) => {
+  document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false })
+})
 
 renderCharacterPicker()
