@@ -89,11 +89,13 @@ const makeMask = () => {
 }
 
 const targetMask = makeMask()
+const guideTemplate = makeMask()
 const rawBrushMask = makeMask()
 const activeMask = makeMask()
 const lockedMask = makeMask()
 const compositeMask = makeMask()
 const targetCtx = targetMask.getContext('2d')!
+const guideTemplateCtx = guideTemplate.getContext('2d')!
 const rawBrushCtx = rawBrushMask.getContext('2d')!
 const activeMaskCtx = activeMask.getContext('2d')!
 const lockedMaskCtx = lockedMask.getContext('2d')!
@@ -113,6 +115,13 @@ finishedPortrait.src = ASSET_MANIFEST.princessFinished
 
 const currentStep = () => steps[currentStepIndex]
 const toolSource = (id: MakeupId) => ASSET_MANIFEST.tools[id]
+const cursorTipOffsets: Record<MakeupId, { x: string; y: string }> = {
+  blush: { x: '-92%', y: '-4%' },
+  shadow: { x: '-87%', y: '-6%' },
+  mascara: { x: '-78%', y: '-5%' },
+  lips: { x: '-75%', y: '-4%' },
+  sparkles: { x: '-91%', y: '-4%' },
+}
 
 const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boolean) => {
   context.beginPath()
@@ -163,15 +172,27 @@ const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boo
 }
 
 const drawGuide = (step: MakeupStep) => {
+  guideTemplateCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  guideTemplateCtx.save()
+  guideTemplateCtx.strokeStyle = 'rgba(255, 236, 171, .78)'
+  guideTemplateCtx.shadowColor = '#b8772f'
+  guideTemplateCtx.shadowBlur = 5
+  guideTemplateCtx.lineWidth = step.id === 'mascara' ? 5.5 : 2.4
+  guideTemplateCtx.setLineDash(step.id === 'mascara' ? [8, 11] : [10, 15])
+  withPath(guideTemplateCtx, step, false)
+  guideTemplateCtx.restore()
+  renderGuide()
+}
+
+const renderGuide = () => {
+  const progress = samples.length === 0 ? 0 : covered.size / samples.length
   guideCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  guideCtx.save()
-  guideCtx.strokeStyle = 'rgba(255, 234, 164, .96)'
-  guideCtx.shadowColor = '#bd7c32'
-  guideCtx.shadowBlur = 13
-  guideCtx.lineWidth = step.id === 'mascara' ? 12 : 7
-  guideCtx.setLineDash(step.id === 'mascara' ? [11, 9] : [14, 11])
-  withPath(guideCtx, step, false)
-  guideCtx.restore()
+  guideCtx.globalAlpha = Math.max(0.08, 1 - progress * 0.93)
+  guideCtx.drawImage(guideTemplate, 0, 0)
+  guideCtx.globalAlpha = 1
+  guideCtx.globalCompositeOperation = 'destination-out'
+  guideCtx.drawImage(activeMask, 0, 0)
+  guideCtx.globalCompositeOperation = 'source-over'
 }
 
 const drawTargetMask = (step: MakeupStep) => {
@@ -246,6 +267,7 @@ const stamp = (point: Point, strength = 1) => {
     if (dx * dx + dy * dy <= radius * radius * 0.72) covered.add(index)
   })
   updateProgress()
+  renderGuide()
   clearHelperTimer()
   if (covered.size / samples.length >= 0.86) finishStep()
   else scheduleHelper()
@@ -349,6 +371,8 @@ const prepareStep = () => {
   progressLabel.textContent = step.label
   activeToolImage.src = toolSource(step.id)
   cursorImage.src = toolSource(step.id)
+  toolCursor.style.setProperty('--tip-x', cursorTipOffsets[step.id].x)
+  toolCursor.style.setProperty('--tip-y', cursorTipOffsets[step.id].y)
   renderTray()
   updateProgress()
   renderReveal()
