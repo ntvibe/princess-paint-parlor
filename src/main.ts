@@ -1,367 +1,409 @@
 import './style.css'
-import { createPortraitGame, STAGE_HEIGHT, STAGE_WIDTH } from './game'
+import { ASSET_MANIFEST } from './assets'
 
 type Point = { x: number; y: number }
-type Zone = { x: number; y: number; rx: number; ry: number }
+type MakeupId = 'blush' | 'shadow' | 'mascara' | 'lips' | 'sparkles'
 
 type MakeupStep = {
-  id: 'blush' | 'shadow' | 'mascara' | 'lips' | 'sparkles'
-  title: string
-  shortTitle: string
+  id: MakeupId
+  name: string
+  label: string
   instruction: string
-  helper: string
-  color: string
-  icon: string
-  zones: Zone[]
-  points: Point[]
+  help: string
+  brushSize: number
 }
 
-const ellipsePoints = (zone: Zone, columns: number, rows: number) => {
-  const points: Point[] = []
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < columns; col += 1) {
-      const x = zone.x - zone.rx + ((col + 0.5) / columns) * zone.rx * 2
-      const y = zone.y - zone.ry + ((row + 0.5) / rows) * zone.ry * 2
-      const nx = (x - zone.x) / zone.rx
-      const ny = (y - zone.y) / zone.ry
-      if (nx * nx + ny * ny <= 0.92) points.push({ x, y })
-    }
-  }
-  return points
-}
-
-const makePoints = (zones: Zone[], columns: number, rows: number) => zones.flatMap((zone) => ellipsePoints(zone, columns, rows))
-
+const ART_WIDTH = 1122
+const ART_HEIGHT = 1402
 const steps: MakeupStep[] = [
-  {
-    id: 'blush', title: 'Rosy Cheeks', shortTitle: 'Blush', icon: '🖌️', color: '#f16e9a',
-    instruction: 'Brush all the glowing cheek petals!', helper: 'Tiny circles make the prettiest rosy cheeks.',
-    zones: [{ x: 342, y: 652, rx: 105, ry: 70 }, { x: 657, y: 652, rx: 105, ry: 70 }],
-    points: [],
-  },
-  {
-    id: 'shadow', title: 'Lavender Eye Shadow', shortTitle: 'Eye shadow', icon: '🪄', color: '#a969d4',
-    instruction: 'Sweep lavender across both eyelids.', helper: 'Follow the little crescent shapes above her eyes.',
-    zones: [{ x: 365, y: 537, rx: 105, ry: 31 }, { x: 635, y: 537, rx: 105, ry: 31 }],
-    points: [],
-  },
-  {
-    id: 'mascara', title: 'Twinkle Lashes', shortTitle: 'Mascara', icon: '🖋️', color: '#3b2136',
-    instruction: 'Gently paint along the sparkling lash line.', helper: 'Short, careful strokes make her lashes twinkle.',
-    zones: [{ x: 365, y: 518, rx: 108, ry: 15 }, { x: 635, y: 518, rx: 108, ry: 15 }],
-    points: [],
-  },
-  {
-    id: 'lips', title: 'Berry Smile', shortTitle: 'Lip color', icon: '💄', color: '#d94169',
-    instruction: 'Color the shining heart-shaped smile.', helper: 'Glide slowly from one side of her smile to the other.',
-    zones: [{ x: 500, y: 744, rx: 106, ry: 43 }],
-    points: [],
-  },
-  {
-    id: 'sparkles', title: 'Fairy Sparkles', shortTitle: 'Sparkles', icon: '✨', color: '#f7ce5d',
-    instruction: 'Tap and swirl over every magic star!', helper: 'Sprinkle a little gold magic on her cheeks.',
-    zones: [{ x: 290, y: 628, rx: 72, ry: 38 }, { x: 710, y: 628, rx: 72, ry: 38 }],
-    points: [],
-  },
+  { id: 'blush', name: 'Rosy Blush', label: 'Blush', instruction: 'Brush only inside the golden cheek shapes.', help: 'Soft circles make the rosy glow.', brushSize: 78 },
+  { id: 'shadow', name: 'Lavender Shadow', label: 'Eyes', instruction: 'Sweep the brush inside both golden eyelids.', help: 'A little purple magic goes a long way.', brushSize: 54 },
+  { id: 'mascara', name: 'Twinkle Lashes', label: 'Lashes', instruction: 'Trace gently along both golden lash lines.', help: 'Slow strokes make neat lashes.', brushSize: 32 },
+  { id: 'lips', name: 'Berry Smile', label: 'Lips', instruction: 'Color just inside the tiny golden smile.', help: 'Follow the lip shape from side to side.', brushSize: 42 },
+  { id: 'sparkles', name: 'Fairy Sparkles', label: 'Magic', instruction: 'Tap every little golden sparkle star!', help: 'Tap, tap — the fairy dust will appear.', brushSize: 35 },
 ]
-
-steps.forEach((step) => {
-  const density = step.id === 'mascara' ? [11, 2] : step.id === 'sparkles' ? [5, 2] : [6, 4]
-  step.points = makePoints(step.zones, density[0], density[1])
-})
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
-  <main class="parlor-shell">
-    <header class="topbar">
-      <div class="brand" aria-label="Princess Paint Parlor"><span class="brand-crown">♕</span><span>Princess<br /><b>Paint Parlor</b></span></div>
-      <div class="step-pill" id="step-pill">1 <span>of</span> 5</div>
-      <button id="reset" class="reset-button" type="button" aria-label="Start over">↺ <span>Start over</span></button>
-    </header>
+  <main class="game-shell">
+    <img class="scene-backdrop" src="${ASSET_MANIFEST.princessBase}" alt="" aria-hidden="true" />
+    <div class="scene-wash" aria-hidden="true"></div>
 
-    <section class="play-area" aria-label="Princess makeup game">
-      <div class="portrait-frame" id="portrait-frame">
-        <div class="frame-lights" aria-hidden="true"></div>
-        <div id="portrait-game" aria-hidden="true"></div>
-        <canvas id="paint-canvas" width="${STAGE_WIDTH}" height="${STAGE_HEIGHT}" aria-label="Use the selected makeup tool here"></canvas>
-        <div id="guide-layer" class="guide-layer" aria-hidden="true"></div>
-        <div id="finish-card" class="finish-card" hidden>
-          <div class="finish-stars">✦ ✧ ✦</div>
-          <p class="finish-kicker">The royal look is ready!</p>
-          <h1>Beautifully magical!</h1>
-          <p>You made a one-of-a-kind princess look.</p>
-          <button type="button" id="play-again">Make another look</button>
-        </div>
+    <section class="top-hud" aria-label="Game controls">
+      <div class="brand"><span class="brand-crown">♕</span><span>Princess<br /><b>Paint Parlor</b></span></div>
+      <div class="step-counter" id="step-counter">1 <small>of</small> 5</div>
+      <button class="reset-button" id="reset-button" type="button">↺ <span>Start over</span></button>
+    </section>
+
+    <div id="portrait-stage" class="portrait-stage" aria-label="Princess makeup canvas">
+      <img class="portrait-image" src="${ASSET_MANIFEST.princessBase}" alt="Princess ready for makeup" />
+      <canvas id="reveal-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
+      <canvas id="guide-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
+      <canvas id="paint-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-label="Paint inside the golden guide using the current makeup tool"></canvas>
+      <div id="sparkle-field" class="sparkle-field" aria-hidden="true"></div>
+      <div id="finish-card" class="finish-card" hidden>
+        <div>✦ ✧ ✦</div>
+        <p>The royal look is ready</p>
+        <h1>Pure magic!</h1>
+        <button type="button" id="play-again">Make another look</button>
       </div>
-    </section>
+    </div>
 
-    <section class="instruction-card" aria-live="polite">
-      <div class="instruction-icon" id="instruction-icon">🖌️</div>
-      <div class="instruction-copy"><p id="step-name">Rosy Cheeks</p><h2 id="instruction">Brush all the glowing cheek petals!</h2></div>
-      <button id="magic-help" type="button" class="magic-help" aria-label="Get magic help">✦<span>Magic help</span></button>
+    <section class="bottom-dock" aria-live="polite">
+      <div class="instruction-glass">
+        <img id="active-tool-image" src="${ASSET_MANIFEST.tools.blush}" alt="" />
+        <div><p id="step-name">Rosy Blush</p><h1 id="instruction">Brush only inside the golden cheek shapes.</h1></div>
+        <button id="magic-help" type="button" title="Use a little fairy magic">✦<span>Help</span></button>
+      </div>
+      <div class="progress-line"><span id="progress-label">Blush</span><div><i id="progress-fill"></i></div><b id="progress-value">0%</b></div>
+      <nav id="tool-tray" class="tool-tray" aria-label="Makeup steps"></nav>
     </section>
-
-    <section class="progress-section" aria-label="Makeup progress">
-      <div class="progress-label"><span id="progress-title">Rosy cheeks</span><span id="progress-value">0%</span></div>
-      <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
-    </section>
-
-    <nav class="tool-tray" aria-label="Makeup steps" id="tool-tray"></nav>
   </main>
-  <div id="tool-follower" class="tool-follower" aria-hidden="true"></div>
+  <div id="tool-cursor" class="tool-cursor" aria-hidden="true"><img id="cursor-image" src="${ASSET_MANIFEST.tools.blush}" alt="" /></div>
 `
 
-const canvas = document.querySelector<HTMLCanvasElement>('#paint-canvas')!
-const ctx = canvas.getContext('2d')!
-const frame = document.querySelector<HTMLDivElement>('#portrait-frame')!
-const guideLayer = document.querySelector<HTMLDivElement>('#guide-layer')!
-const toolFollower = document.querySelector<HTMLDivElement>('#tool-follower')!
-const progressFill = document.querySelector<HTMLDivElement>('#progress-fill')!
-const progressValue = document.querySelector<HTMLSpanElement>('#progress-value')!
-const progressTitle = document.querySelector<HTMLSpanElement>('#progress-title')!
+const stage = document.querySelector<HTMLDivElement>('#portrait-stage')!
+const paintCanvas = document.querySelector<HTMLCanvasElement>('#paint-canvas')!
+const revealCanvas = document.querySelector<HTMLCanvasElement>('#reveal-canvas')!
+const guideCanvas = document.querySelector<HTMLCanvasElement>('#guide-canvas')!
+const revealCtx = revealCanvas.getContext('2d')!
+const guideCtx = guideCanvas.getContext('2d')!
+const sparkleField = document.querySelector<HTMLDivElement>('#sparkle-field')!
+const toolCursor = document.querySelector<HTMLDivElement>('#tool-cursor')!
+const cursorImage = document.querySelector<HTMLImageElement>('#cursor-image')!
+const activeToolImage = document.querySelector<HTMLImageElement>('#active-tool-image')!
+const stepCounter = document.querySelector<HTMLDivElement>('#step-counter')!
 const stepName = document.querySelector<HTMLParagraphElement>('#step-name')!
 const instruction = document.querySelector<HTMLHeadingElement>('#instruction')!
-const instructionIcon = document.querySelector<HTMLDivElement>('#instruction-icon')!
-const stepPill = document.querySelector<HTMLDivElement>('#step-pill')!
-const tray = document.querySelector<HTMLElement>('#tool-tray')!
+const progressLabel = document.querySelector<HTMLSpanElement>('#progress-label')!
+const progressFill = document.querySelector<HTMLElement>('#progress-fill')!
+const progressValue = document.querySelector<HTMLElement>('#progress-value')!
+const toolTray = document.querySelector<HTMLElement>('#tool-tray')!
 const finishCard = document.querySelector<HTMLDivElement>('#finish-card')!
 
-createPortraitGame('portrait-game')
+const makeMask = () => {
+  const canvas = document.createElement('canvas')
+  canvas.width = ART_WIDTH
+  canvas.height = ART_HEIGHT
+  return canvas
+}
 
-let currentStep = 0
-let active = false
-let complete = false
-let touched = new Set<number>()
-let helperTimer: number | undefined
+const targetMask = makeMask()
+const rawBrushMask = makeMask()
+const activeMask = makeMask()
+const lockedMask = makeMask()
+const compositeMask = makeMask()
+const targetCtx = targetMask.getContext('2d')!
+const rawBrushCtx = rawBrushMask.getContext('2d')!
+const activeMaskCtx = activeMask.getContext('2d')!
+const lockedMaskCtx = lockedMask.getContext('2d')!
+const compositeMaskCtx = compositeMask.getContext('2d')!
+
+let currentStepIndex = 0
+let samples: Point[] = []
+let targetPixels = new Uint8ClampedArray()
+let covered = new Set<number>()
+let isPainting = false
 let lastPoint: Point | undefined
+let isFinishing = false
+let helperTimer: number | undefined
 
-const current = () => steps[currentStep]
+const finishedPortrait = new Image()
+finishedPortrait.src = ASSET_MANIFEST.princessFinished
 
-const percentage = () => touched.size / current().points.length
+const currentStep = () => steps[currentStepIndex]
+const toolSource = (id: MakeupId) => ASSET_MANIFEST.tools[id]
 
-const clearTimer = () => {
+const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boolean) => {
+  context.beginPath()
+  if (step.id === 'blush') {
+    context.ellipse(355, 665, 96, 65, -0.16, 0, Math.PI * 2)
+    context.ellipse(767, 665, 96, 65, 0.16, 0, Math.PI * 2)
+  }
+  if (step.id === 'shadow') {
+    context.moveTo(337, 537); context.quadraticCurveTo(423, 464, 511, 534); context.quadraticCurveTo(422, 558, 337, 537); context.closePath()
+    context.moveTo(611, 534); context.quadraticCurveTo(699, 464, 785, 537); context.quadraticCurveTo(700, 558, 611, 534); context.closePath()
+  }
+  if (step.id === 'mascara') {
+    context.moveTo(338, 520); context.quadraticCurveTo(422, 485, 508, 520)
+    context.moveTo(614, 520); context.quadraticCurveTo(700, 485, 784, 520)
+  }
+  if (step.id === 'lips') {
+    context.moveTo(459, 726)
+    context.quadraticCurveTo(488, 702, 528, 714)
+    context.quadraticCurveTo(559, 694, 592, 714)
+    context.quadraticCurveTo(632, 702, 663, 726)
+    context.quadraticCurveTo(621, 764, 561, 769)
+    context.quadraticCurveTo(501, 764, 459, 726)
+    context.closePath()
+  }
+  if (step.id === 'sparkles') {
+    const stars: Point[] = [
+      { x: 330, y: 602 }, { x: 366, y: 619 }, { x: 399, y: 605 },
+      { x: 723, y: 605 }, { x: 756, y: 619 }, { x: 793, y: 602 },
+    ]
+    stars.forEach(({ x, y }) => {
+      for (let vertex = 0; vertex < 10; vertex += 1) {
+        const angle = -Math.PI / 2 + vertex * Math.PI / 5
+        const radius = vertex % 2 === 0 ? 17 : 7
+        const px = x + Math.cos(angle) * radius
+        const py = y + Math.sin(angle) * radius
+        if (vertex === 0) context.moveTo(px, py)
+        else context.lineTo(px, py)
+      }
+      context.closePath()
+    })
+  }
+  if (step.id === 'mascara') {
+    context.lineCap = 'round'
+    context.lineWidth = fill ? 21 : 15
+    context.stroke()
+  } else if (fill) context.fill()
+  else context.stroke()
+}
+
+const drawGuide = (step: MakeupStep) => {
+  guideCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  guideCtx.save()
+  guideCtx.strokeStyle = 'rgba(255, 234, 164, .96)'
+  guideCtx.shadowColor = '#bd7c32'
+  guideCtx.shadowBlur = 13
+  guideCtx.lineWidth = step.id === 'mascara' ? 12 : 7
+  guideCtx.setLineDash(step.id === 'mascara' ? [11, 9] : [14, 11])
+  withPath(guideCtx, step, false)
+  guideCtx.restore()
+}
+
+const drawTargetMask = (step: MakeupStep) => {
+  targetCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  targetCtx.save()
+  targetCtx.fillStyle = '#ffffff'
+  targetCtx.strokeStyle = '#ffffff'
+  withPath(targetCtx, step, true)
+  targetCtx.restore()
+  targetPixels = targetCtx.getImageData(0, 0, ART_WIDTH, ART_HEIGHT).data
+}
+
+const buildSamples = (step: MakeupStep) => {
+  const spacing = step.id === 'mascara' ? 13 : step.id === 'sparkles' ? 8 : 20
+  const next: Point[] = []
+  for (let y = spacing / 2; y < ART_HEIGHT; y += spacing) {
+    for (let x = spacing / 2; x < ART_WIDTH; x += spacing) {
+      const index = (Math.floor(y) * ART_WIDTH + Math.floor(x)) * 4 + 3
+      if (targetPixels[index] > 200) next.push({ x, y })
+    }
+  }
+  return next
+}
+
+const updateProgress = () => {
+  const percent = samples.length === 0 ? 0 : Math.round((covered.size / samples.length) * 100)
+  progressFill.style.width = `${percent}%`
+  progressValue.textContent = `${percent}%`
+}
+
+const renderReveal = () => {
+  compositeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  compositeMaskCtx.drawImage(lockedMask, 0, 0)
+  compositeMaskCtx.drawImage(activeMask, 0, 0)
+  revealCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  revealCtx.drawImage(finishedPortrait, 0, 0, ART_WIDTH, ART_HEIGHT)
+  revealCtx.globalCompositeOperation = 'destination-in'
+  revealCtx.drawImage(compositeMask, 0, 0)
+  revealCtx.globalCompositeOperation = 'source-over'
+}
+
+const isInsideTarget = (point: Point) => {
+  const x = Math.round(point.x)
+  const y = Math.round(point.y)
+  if (x < 0 || x >= ART_WIDTH || y < 0 || y >= ART_HEIGHT) return false
+  return targetPixels[(y * ART_WIDTH + x) * 4 + 3] > 20
+}
+
+const stamp = (point: Point, strength = 1) => {
+  const step = currentStep()
+  if (!isInsideTarget(point) || isFinishing) return
+  const radius = step.brushSize * strength
+  const gradient = rawBrushCtx.createRadialGradient(point.x, point.y, radius * 0.08, point.x, point.y, radius)
+  gradient.addColorStop(0, 'rgba(255,255,255,1)')
+  gradient.addColorStop(0.68, 'rgba(255,255,255,.94)')
+  gradient.addColorStop(1, 'rgba(255,255,255,0)')
+  rawBrushCtx.fillStyle = gradient
+  rawBrushCtx.beginPath()
+  rawBrushCtx.arc(point.x, point.y, radius, 0, Math.PI * 2)
+  rawBrushCtx.fill()
+
+  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  activeMaskCtx.drawImage(rawBrushMask, 0, 0)
+  activeMaskCtx.globalCompositeOperation = 'destination-in'
+  activeMaskCtx.drawImage(targetMask, 0, 0)
+  activeMaskCtx.globalCompositeOperation = 'source-over'
+  renderReveal()
+
+  samples.forEach((sample, index) => {
+    const dx = sample.x - point.x
+    const dy = sample.y - point.y
+    if (dx * dx + dy * dy <= radius * radius * 0.72) covered.add(index)
+  })
+  updateProgress()
+  clearHelperTimer()
+  if (covered.size / samples.length >= 0.86) finishStep()
+  else scheduleHelper()
+}
+
+const stampLine = (from: Point, to: Point) => {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y)
+  const parts = Math.max(1, Math.ceil(distance / (currentStep().brushSize * 0.38)))
+  for (let part = 0; part <= parts; part += 1) {
+    stamp({ x: from.x + (to.x - from.x) * (part / parts), y: from.y + (to.y - from.y) * (part / parts) })
+  }
+}
+
+const clearHelperTimer = () => {
   if (helperTimer !== undefined) window.clearTimeout(helperTimer)
   helperTimer = undefined
 }
 
-const zoneContains = (point: Point, zone: Zone, padding = 0) => {
-  const dx = (point.x - zone.x) / (zone.rx + padding)
-  const dy = (point.y - zone.y) / (zone.ry + padding)
-  return dx * dx + dy * dy <= 1
-}
-
-const pointIsUseful = (point: Point) => current().zones.some((zone) => zoneContains(point, zone, 27))
-
-const drawGuide = () => {
-  guideLayer.replaceChildren()
-  current().zones.forEach((zone) => {
-    const petal = document.createElement('div')
-    petal.className = `guide-petal guide-${current().id}`
-    petal.style.left = `${(zone.x / STAGE_WIDTH) * 100}%`
-    petal.style.top = `${(zone.y / STAGE_HEIGHT) * 100}%`
-    petal.style.width = `${(zone.rx * 2 / STAGE_WIDTH) * 100}%`
-    petal.style.height = `${(zone.ry * 2 / STAGE_HEIGHT) * 100}%`
-    guideLayer.append(petal)
-  })
-}
-
-const toolMarkup = (step: MakeupStep, index: number) => `
-  <button class="tool ${index === currentStep ? 'selected' : ''} ${index < currentStep ? 'done' : ''}" type="button" data-step="${index}" ${index > currentStep ? 'disabled' : ''} aria-label="${step.title}">
-    <span class="tool-art tool-${step.id}"><i>${step.icon}</i></span>
-    <span>${step.shortTitle}</span>
-    ${index < currentStep ? '<b>✓</b>' : ''}
-  </button>`
-
-const renderTray = () => { tray.innerHTML = steps.map(toolMarkup).join('') }
-
-const updateFollower = (event: PointerEvent) => {
-  toolFollower.style.left = `${event.clientX}px`
-  toolFollower.style.top = `${event.clientY}px`
-  toolFollower.innerHTML = `<span class="follower-art tool-${current().id}">${current().icon}</span>`
-  toolFollower.classList.add('shown')
-}
-
-const hideFollower = () => toolFollower.classList.remove('shown')
-
-const updateProgress = () => {
-  const progress = Math.min(1, percentage())
-  const value = Math.round(progress * 100)
-  progressFill.style.width = `${value}%`
-  progressValue.textContent = `${value}%`
-}
-
-const drawDab = (point: Point, force = 1) => {
-  const step = current()
-  ctx.save()
-  if (step.id === 'blush') {
-    const gradient = ctx.createRadialGradient(point.x, point.y, 4, point.x, point.y, 46)
-    gradient.addColorStop(0, 'rgba(239, 88, 137, .25)')
-    gradient.addColorStop(0.58, 'rgba(241, 110, 154, .14)')
-    gradient.addColorStop(1, 'rgba(241, 110, 154, 0)')
-    ctx.fillStyle = gradient
-    ctx.beginPath(); ctx.ellipse(point.x, point.y, 42 * force, 30 * force, 0, 0, Math.PI * 2); ctx.fill()
-  } else if (step.id === 'shadow') {
-    const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, 33)
-    gradient.addColorStop(0, 'rgba(180, 109, 224, .40)')
-    gradient.addColorStop(1, 'rgba(180, 109, 224, 0)')
-    ctx.fillStyle = gradient
-    ctx.beginPath(); ctx.ellipse(point.x, point.y, 37 * force, 17 * force, 0, 0, Math.PI * 2); ctx.fill()
-  } else if (step.id === 'mascara') {
-    ctx.strokeStyle = 'rgba(56, 31, 50, .82)'
-    ctx.lineWidth = 7 * force
-    ctx.lineCap = 'round'
-    ctx.beginPath(); ctx.moveTo(point.x - 13, point.y + 3); ctx.quadraticCurveTo(point.x, point.y - 8, point.x + 13, point.y + 2); ctx.stroke()
-    ctx.lineWidth = 3 * force
-    ctx.beginPath(); ctx.moveTo(point.x + 7, point.y - 2); ctx.lineTo(point.x + 14, point.y - 13); ctx.stroke()
-  } else if (step.id === 'lips') {
-    const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, 28)
-    gradient.addColorStop(0, 'rgba(215, 48, 92, .73)')
-    gradient.addColorStop(1, 'rgba(215, 48, 92, 0)')
-    ctx.fillStyle = gradient
-    ctx.beginPath(); ctx.ellipse(point.x, point.y, 29 * force, 17 * force, 0, 0, Math.PI * 2); ctx.fill()
-  } else {
-    ctx.fillStyle = 'rgba(255, 229, 121, .96)'
-    ctx.shadowBlur = 15; ctx.shadowColor = '#ffcf56'
-    ctx.font = `${40 * force}px Georgia`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText('✦', point.x, point.y)
-  }
-  ctx.restore()
-}
-
-const paint = (point: Point) => {
-  if (!pointIsUseful(point) || complete) return
-  drawDab(point)
-  current().points.forEach((target, index) => {
-    const dx = target.x - point.x
-    const dy = target.y - point.y
-    const radius = current().id === 'mascara' ? 25 : 46
-    if (dx * dx + dy * dy < radius * radius) touched.add(index)
-  })
-  updateProgress()
-  clearTimer()
-  if (percentage() >= 0.9) finishStep()
-  else scheduleFairyHelp()
-}
-
-const paintLine = (from: Point, to: Point) => {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y)
-  const segments = Math.max(1, Math.ceil(distance / 18))
-  for (let index = 1; index <= segments; index += 1) {
-    paint({ x: from.x + ((to.x - from.x) * index) / segments, y: from.y + ((to.y - from.y) * index) / segments })
-  }
-}
-
-const remaining = () => current().points
+const remainingPoints = () => samples
   .map((point, index) => ({ point, index }))
-  .filter(({ index }) => !touched.has(index))
+  .filter(({ index }) => !covered.has(index))
 
-const fairyHelp = (amount = 6) => {
-  if (complete) return
-  const missing = remaining()
-  missing.slice(0, amount).forEach(({ point, index }, order) => {
-    window.setTimeout(() => {
-      drawDab(point, 0.9)
-      touched.add(index)
-      updateProgress()
-      if (percentage() >= 0.9) finishStep()
-    }, order * 80)
+const useMagicHelp = (amount = 7) => {
+  if (isFinishing) return
+  const remaining = remainingPoints()
+  remaining.slice(0, amount).forEach(({ point }, index) => {
+    window.setTimeout(() => stamp(point, 0.82), index * 90)
   })
-  instruction.textContent = 'A little fairy magic is helping you!'
-  window.setTimeout(() => { if (!complete) instruction.textContent = current().instruction }, 1100)
+  instruction.textContent = 'A tiny fairy is helping with the tricky spots!'
+  window.setTimeout(() => { if (!isFinishing) instruction.textContent = currentStep().instruction }, 1150)
 }
 
-const scheduleFairyHelp = () => {
-  clearTimer()
-  helperTimer = window.setTimeout(() => {
-    if (active && percentage() < 0.9 && touched.size > 2) fairyHelp(3)
-  }, 2800)
+const scheduleHelper = () => {
+  clearHelperTimer()
+  if (covered.size < 3) return
+  helperTimer = window.setTimeout(() => useMagicHelp(3), 2800)
+}
+
+const createSparkleBurst = () => {
+  sparkleField.replaceChildren()
+  for (let index = 0; index < 22; index += 1) {
+    const sparkle = document.createElement('i')
+    sparkle.textContent = index % 3 === 0 ? '✦' : '✧'
+    sparkle.style.left = `${23 + Math.random() * 54}%`
+    sparkle.style.top = `${31 + Math.random() * 28}%`
+    sparkle.style.animationDelay = `${index * 25}ms`
+    sparkleField.append(sparkle)
+  }
+  sparkleField.classList.add('burst')
+  window.setTimeout(() => { sparkleField.classList.remove('burst'); sparkleField.replaceChildren() }, 1050)
 }
 
 const finishStep = () => {
-  if (complete) return
-  complete = true
-  clearTimer()
-  remaining().forEach(({ point, index }, order) => {
-    window.setTimeout(() => { drawDab(point, 0.85); touched.add(index) }, order * 16)
-  })
-  touched = new Set(current().points.map((_, index) => index))
+  if (isFinishing) return
+  isFinishing = true
+  clearHelperTimer()
+  lockedMaskCtx.drawImage(targetMask, 0, 0)
+  rawBrushCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  covered = new Set(samples.map((_, index) => index))
   updateProgress()
-  guideLayer.classList.add('vanish')
-  instruction.textContent = `Perfect! ${current().title} is ready!`
-  frame.classList.add('celebrate')
+  renderReveal()
+  guideCanvas.classList.add('guide-hidden')
+  toolCursor.classList.remove('shown')
+  createSparkleBurst()
+  instruction.textContent = `Perfect! ${currentStep().name} is complete.`
   window.setTimeout(() => {
-    frame.classList.remove('celebrate')
-    if (currentStep === steps.length - 1) {
+    if (currentStepIndex === steps.length - 1) {
       finishCard.hidden = false
       finishCard.classList.add('show')
-      hideFollower()
-    } else {
-      currentStep += 1
-      complete = false
-      touched = new Set()
-      renderStep()
+      toolCursor.classList.remove('shown')
+      return
     }
-  }, 1050)
+    currentStepIndex += 1
+    isFinishing = false
+    prepareStep()
+  }, 980)
 }
 
-const renderStep = () => {
-  const step = current()
-  guideLayer.classList.remove('vanish')
-  stepName.textContent = step.title
+const renderTray = () => {
+  toolTray.innerHTML = steps.map((step, index) => `
+    <div class="tool ${index === currentStepIndex ? 'active' : ''} ${index < currentStepIndex ? 'done' : ''}" aria-current="${index === currentStepIndex ? 'step' : 'false'}">
+      <img src="${toolSource(step.id)}" alt="" />
+      <span>${step.label}</span>
+      ${index < currentStepIndex ? '<b>✓</b>' : ''}
+    </div>`).join('')
+}
+
+const prepareStep = () => {
+  const step = currentStep()
+  guideCanvas.classList.remove('guide-hidden')
+  rawBrushCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  drawTargetMask(step)
+  drawGuide(step)
+  samples = buildSamples(step)
+  covered = new Set()
+  stepCounter.innerHTML = `${currentStepIndex + 1} <small>of</small> ${steps.length}`
+  stepName.textContent = step.name
   instruction.textContent = step.instruction
-  instructionIcon.textContent = step.icon
-  progressTitle.textContent = step.shortTitle
-  stepPill.innerHTML = `${currentStep + 1} <span>of</span> ${steps.length}`
-  updateProgress()
-  drawGuide()
+  progressLabel.textContent = step.label
+  activeToolImage.src = toolSource(step.id)
+  cursorImage.src = toolSource(step.id)
   renderTray()
+  updateProgress()
+  renderReveal()
 }
 
-const toStagePoint = (event: PointerEvent): Point => {
-  const rect = canvas.getBoundingClientRect()
+const toImagePoint = (event: PointerEvent): Point => {
+  const rect = stage.getBoundingClientRect()
   return {
-    x: ((event.clientX - rect.left) / rect.width) * STAGE_WIDTH,
-    y: ((event.clientY - rect.top) / rect.height) * STAGE_HEIGHT,
+    x: ((event.clientX - rect.left) / rect.width) * ART_WIDTH,
+    y: ((event.clientY - rect.top) / rect.height) * ART_HEIGHT,
   }
 }
 
-canvas.addEventListener('pointerdown', (event) => {
-  if (finishCard.hidden === false) return
-  active = true
-  canvas.setPointerCapture(event.pointerId)
-  updateFollower(event)
-  const point = toStagePoint(event)
-  lastPoint = point
-  paint(point)
+const moveToolCursor = (event: PointerEvent) => {
+  if (isFinishing || !finishCard.hidden) {
+    toolCursor.classList.remove('shown')
+    return
+  }
+  toolCursor.style.left = `${event.clientX}px`
+  toolCursor.style.top = `${event.clientY}px`
+  toolCursor.classList.add('shown')
+}
+
+paintCanvas.addEventListener('pointerdown', (event) => {
+  if (!finishCard.hidden) return
+  paintCanvas.setPointerCapture(event.pointerId)
+  isPainting = true
+  moveToolCursor(event)
+  lastPoint = toImagePoint(event)
+  stamp(lastPoint)
 })
 
-canvas.addEventListener('pointermove', (event) => {
-  updateFollower(event)
-  if (!active || !lastPoint) return
-  const point = toStagePoint(event)
-  paintLine(lastPoint, point)
-  lastPoint = point
+paintCanvas.addEventListener('pointermove', (event) => {
+  moveToolCursor(event)
+  if (!isPainting || !lastPoint) return
+  const next = toImagePoint(event)
+  stampLine(lastPoint, next)
+  lastPoint = next
 })
 
-const endPaint = () => { active = false; lastPoint = undefined; clearTimer(); hideFollower() }
-canvas.addEventListener('pointerup', endPaint)
-canvas.addEventListener('pointercancel', endPaint)
-canvas.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') hideFollower() })
-canvas.addEventListener('pointerenter', updateFollower)
+const stopPainting = () => {
+  isPainting = false
+  lastPoint = undefined
+  clearHelperTimer()
+  toolCursor.classList.remove('shown')
+}
 
-document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => fairyHelp(8))
-document.querySelector<HTMLButtonElement>('#reset')!.addEventListener('click', () => window.location.reload())
+paintCanvas.addEventListener('pointerup', stopPainting)
+paintCanvas.addEventListener('pointercancel', stopPainting)
+paintCanvas.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') toolCursor.classList.remove('shown') })
+paintCanvas.addEventListener('pointerenter', moveToolCursor)
+
+document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
+document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', () => window.location.reload())
 document.querySelector<HTMLButtonElement>('#play-again')!.addEventListener('click', () => window.location.reload())
 
-tray.addEventListener('click', (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.tool')
-  if (!button || button.disabled) return
-  const stepIndex = Number(button.dataset.step)
-  if (stepIndex === currentStep) return
-  currentStep = stepIndex
-  complete = false
-  touched = new Set()
-  renderStep()
-})
-
-renderStep()
+finishedPortrait.addEventListener('load', () => prepareStep(), { once: true })
+if (finishedPortrait.complete) prepareStep()

@@ -1,6 +1,6 @@
 # Princess Paint Parlor
 
-A gentle, mobile-first makeup painting game for five- and six-year-old players. Drag each oversized makeup tool across the glowing guide areas to add rosy blush, eye shadow, lashes, lip color, and fairy sparkles. A little magic help appears if a child needs it.
+A gentle, full-screen makeup painting game for five- and six-year-old players. Each real makeup tool reveals a pre-rendered, polished makeup layer only through its exact black-and-white target mask. A sparkle animation locks in each finished layer, and a little magic help appears if a child needs it.
 
 ## Run locally
 
@@ -15,4 +15,4 @@ npm run dev
 npm run build
 ```
 
-The princess portrait in `public/assets/princess-base.png` was generated with ChatGPT image generation (gpt-image-2) specifically for this project. It is an original character, not an existing studio character.
+The original princess portraits and transparent rose-gold cosmetic tools in `public/assets/` were generated with ChatGPT image generation (gpt-image-2) specifically for this project. It is an original character, not an existing studio character.
