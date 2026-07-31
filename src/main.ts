@@ -13,6 +13,24 @@ type MakeupStep = {
   brushSize: number
 }
 
+type PrincessId = 'lila' | 'asha' | 'mei' | 'zuri'
+
+type FaceProfile = {
+  offsetX: number
+  offsetY: number
+  scaleX: number
+  scaleY: number
+}
+
+type Princess = {
+  id: PrincessId
+  name: string
+  subtitle: string
+  base: string
+  finished: string
+  profile: FaceProfile
+}
+
 const ART_WIDTH = 1122
 const ART_HEIGHT = 1402
 const steps: MakeupStep[] = [
@@ -23,9 +41,16 @@ const steps: MakeupStep[] = [
   { id: 'sparkles', name: 'Fairy Sparkles', label: 'Magic', instruction: 'Tap every little golden sparkle star!', help: 'Tap, tap — the fairy dust will appear.', brushSize: 35 },
 ]
 
+const princesses: Princess[] = [
+  { id: 'lila', name: 'Lila', subtitle: 'Rose crown', base: ASSET_MANIFEST.princessBase, finished: ASSET_MANIFEST.princessFinished, profile: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 } },
+  { id: 'asha', name: 'Asha', subtitle: 'Sun crown', base: ASSET_MANIFEST.princesses.asha.base, finished: ASSET_MANIFEST.princesses.asha.finished, profile: { offsetX: 0, offsetY: 14, scaleX: 1, scaleY: 1 } },
+  { id: 'mei', name: 'Mei', subtitle: 'Jade crown', base: ASSET_MANIFEST.princesses.mei.base, finished: ASSET_MANIFEST.princesses.mei.finished, profile: { offsetX: 0, offsetY: 5, scaleX: 1.08, scaleY: 1.02 } },
+  { id: 'zuri', name: 'Zuri', subtitle: 'Golden curls', base: ASSET_MANIFEST.princesses.zuri.base, finished: ASSET_MANIFEST.princesses.zuri.finished, profile: { offsetX: 0, offsetY: 7, scaleX: 1.14, scaleY: 1.02 } },
+]
+
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
-  <main class="game-shell">
+  <main class="game-shell selecting">
     <img class="scene-backdrop" src="${ASSET_MANIFEST.princessBase}" alt="" aria-hidden="true" />
     <div class="scene-wash" aria-hidden="true"></div>
 
@@ -35,8 +60,17 @@ app.innerHTML = `
       <button class="reset-button" id="reset-button" type="button">↺ <span>Start over</span></button>
     </section>
 
+    <section id="character-picker" class="character-picker" aria-labelledby="character-picker-title">
+      <div class="picker-glass">
+        <p>Princess Paint Parlor</p>
+        <h1 id="character-picker-title">Choose a royal friend</h1>
+        <span>Pick a princess, then paint her magical look.</span>
+        <div id="character-grid" class="character-grid"></div>
+      </div>
+    </section>
+
     <div id="portrait-stage" class="portrait-stage" aria-label="Princess makeup canvas">
-      <img class="portrait-image" src="${ASSET_MANIFEST.princessBase}" alt="Princess ready for makeup" />
+      <img id="portrait-image" class="portrait-image" src="${ASSET_MANIFEST.princessBase}" alt="Princess ready for makeup" />
       <canvas id="reveal-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
       <canvas id="guide-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
       <canvas id="paint-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-label="Paint inside the golden guide using the current makeup tool"></canvas>
@@ -58,6 +92,10 @@ app.innerHTML = `
 
 const gameShell = document.querySelector<HTMLElement>('.game-shell')!
 const stage = document.querySelector<HTMLDivElement>('#portrait-stage')!
+const sceneBackdrop = document.querySelector<HTMLImageElement>('.scene-backdrop')!
+const portraitImage = document.querySelector<HTMLImageElement>('#portrait-image')!
+const characterPicker = document.querySelector<HTMLElement>('#character-picker')!
+const characterGrid = document.querySelector<HTMLElement>('#character-grid')!
 const paintCanvas = document.querySelector<HTMLCanvasElement>('#paint-canvas')!
 const revealCanvas = document.querySelector<HTMLCanvasElement>('#reveal-canvas')!
 const guideCanvas = document.querySelector<HTMLCanvasElement>('#guide-canvas')!
@@ -106,11 +144,12 @@ let lastPoint: Point | undefined
 let isFinishing = false
 let isFinalLook = false
 let helperTimer: number | undefined
+let selectedPrincess: Princess | undefined
 
 const finishedPortrait = new Image()
-finishedPortrait.src = ASSET_MANIFEST.princessFinished
 
 const currentStep = () => steps[currentStepIndex]
+const currentPrincess = () => selectedPrincess ?? princesses[0]
 const toolSource = (id: MakeupId) => ASSET_MANIFEST.tools[id]
 const cursorTipOffsets: Record<MakeupId, { x: string; y: string }> = {
   blush: { x: '-92%', y: '-4%' },
@@ -121,6 +160,11 @@ const cursorTipOffsets: Record<MakeupId, { x: string; y: string }> = {
 }
 
 const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boolean) => {
+  const profile = currentPrincess().profile
+  context.save()
+  context.translate(ART_WIDTH / 2 + profile.offsetX, ART_HEIGHT / 2 + profile.offsetY)
+  context.scale(profile.scaleX, profile.scaleY)
+  context.translate(-ART_WIDTH / 2, -ART_HEIGHT / 2)
   context.beginPath()
   if (step.id === 'blush') {
     // These deliberately trace the two pink areas in the finished portrait rather
@@ -189,6 +233,7 @@ const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boo
     context.stroke()
   } else if (fill) context.fill()
   else context.stroke()
+  context.restore()
 }
 
 const drawGuide = (step: MakeupStep) => {
@@ -407,6 +452,61 @@ const prepareStep = () => {
   renderReveal()
 }
 
+const clearMakeupState = () => {
+  clearHelperTimer()
+  currentStepIndex = 0
+  samples = []
+  covered = new Set()
+  targetPixels = new Uint8ClampedArray()
+  isPainting = false
+  lastPoint = undefined
+  isFinishing = false
+  isFinalLook = false
+  ;[targetCtx, softTargetCtx, guideTemplateCtx, rawBrushCtx, activeMaskCtx, lockedMaskCtx, compositeMaskCtx, revealCtx, guideCtx].forEach((context) => {
+    context.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  })
+  sparkleField.replaceChildren()
+  sparkleField.classList.remove('burst')
+  toolCursor.classList.remove('shown')
+}
+
+const renderCharacterPicker = () => {
+  characterGrid.innerHTML = princesses.map((princess) => `
+    <button class="character-card" type="button" data-princess-id="${princess.id}" aria-label="Choose ${princess.name}">
+      <img src="${princess.base}" alt="" />
+      <span><b>${princess.name}</b><small>${princess.subtitle}</small></span>
+    </button>`).join('')
+}
+
+const openCharacterPicker = () => {
+  clearHelperTimer()
+  isPainting = false
+  toolCursor.classList.remove('shown')
+  characterPicker.hidden = false
+  gameShell.classList.remove('final-look')
+  gameShell.classList.add('selecting')
+}
+
+const selectPrincess = (princess: Princess) => {
+  selectedPrincess = princess
+  clearMakeupState()
+  portraitImage.src = princess.base
+  portraitImage.alt = `${princess.name} ready for makeup`
+  sceneBackdrop.src = princess.base
+  characterPicker.hidden = true
+
+  let ready = false
+  const beginGame = () => {
+    if (ready) return
+    ready = true
+    gameShell.classList.remove('selecting', 'final-look')
+    prepareStep()
+  }
+  finishedPortrait.onload = beginGame
+  finishedPortrait.src = princess.finished
+  if (finishedPortrait.complete) beginGame()
+}
+
 const toImagePoint = (event: PointerEvent): Point => {
   const rect = stage.getBoundingClientRect()
   return {
@@ -454,8 +554,13 @@ paintCanvas.addEventListener('pointercancel', stopPainting)
 paintCanvas.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') toolCursor.classList.remove('shown') })
 paintCanvas.addEventListener('pointerenter', moveToolCursor)
 
-document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
-document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', () => window.location.reload())
+characterGrid.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-princess-id]')
+  const princess = princesses.find(({ id }) => id === button?.dataset.princessId)
+  if (princess) selectPrincess(princess)
+})
 
-finishedPortrait.addEventListener('load', () => prepareStep(), { once: true })
-if (finishedPortrait.complete) prepareStep()
+document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
+document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', openCharacterPicker)
+
+renderCharacterPicker()

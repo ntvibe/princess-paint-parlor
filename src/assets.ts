@@ -1,6 +1,20 @@
 export const ASSET_MANIFEST = {
   princessBase: './assets/princess-base.png',
   princessFinished: './assets/princess-finished.png',
+  princesses: {
+    asha: {
+      base: './assets/princesses/asha-base.png',
+      finished: './assets/princesses/asha-finished.png',
+    },
+    mei: {
+      base: './assets/princesses/mei-base.png',
+      finished: './assets/princesses/mei-finished.png',
+    },
+    zuri: {
+      base: './assets/princesses/zuri-base.png',
+      finished: './assets/princesses/zuri-finished.png',
+    },
+  },
   tools: {
     blush: './assets/tools/blush-512.png',
     shadow: './assets/tools/shadow-512.png',
