@@ -14,6 +14,14 @@ export const ASSET_MANIFEST = {
       base: './assets/princesses/zuri-base.png',
       finished: './assets/princesses/zuri-finished.png',
     },
+    mira: {
+      base: './assets/princesses/mira-base.png',
+      finished: './assets/princesses/mira-finished.png',
+    },
+    poppy: {
+      base: './assets/princesses/poppy-base.png',
+      finished: './assets/princesses/poppy-finished.png',
+    },
   },
   tools: {
     blush: './assets/tools/blush-512.png',

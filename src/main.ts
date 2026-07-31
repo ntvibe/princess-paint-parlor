@@ -13,7 +13,7 @@ type MakeupStep = {
   brushSize: number
 }
 
-type PrincessId = 'lila' | 'asha' | 'mei' | 'zuri'
+type PrincessId = 'lila' | 'asha' | 'mei' | 'zuri' | 'mira' | 'poppy'
 
 type FaceProfile = {
   offsetX: number
@@ -46,6 +46,8 @@ const princesses: Princess[] = [
   { id: 'asha', name: 'Asha', subtitle: 'Sun crown', base: ASSET_MANIFEST.princesses.asha.base, finished: ASSET_MANIFEST.princesses.asha.finished, profile: { offsetX: 0, offsetY: 14, scaleX: 1, scaleY: 1 } },
   { id: 'mei', name: 'Mei', subtitle: 'Jade crown', base: ASSET_MANIFEST.princesses.mei.base, finished: ASSET_MANIFEST.princesses.mei.finished, profile: { offsetX: 0, offsetY: 5, scaleX: 1.08, scaleY: 1.02 } },
   { id: 'zuri', name: 'Zuri', subtitle: 'Golden curls', base: ASSET_MANIFEST.princesses.zuri.base, finished: ASSET_MANIFEST.princesses.zuri.finished, profile: { offsetX: 0, offsetY: 7, scaleX: 1.14, scaleY: 1.02 } },
+  { id: 'mira', name: 'Mira', subtitle: 'Amethyst braid', base: ASSET_MANIFEST.princesses.mira.base, finished: ASSET_MANIFEST.princesses.mira.finished, profile: { offsetX: 0, offsetY: -10, scaleX: 1.02, scaleY: 1 } },
+  { id: 'poppy', name: 'Poppy', subtitle: 'Rose-gold crown', base: ASSET_MANIFEST.princesses.poppy.base, finished: ASSET_MANIFEST.princesses.poppy.finished, profile: { offsetX: 0, offsetY: 95, scaleX: 1, scaleY: 1.05 } },
 ]
 
 const app = document.querySelector<HTMLDivElement>('#app')!
