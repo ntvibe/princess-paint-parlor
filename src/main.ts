@@ -41,12 +41,6 @@ app.innerHTML = `
       <canvas id="guide-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
       <canvas id="paint-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-label="Paint inside the golden guide using the current makeup tool"></canvas>
       <div id="sparkle-field" class="sparkle-field" aria-hidden="true"></div>
-      <div id="finish-card" class="finish-card" hidden>
-        <div>✦ ✧ ✦</div>
-        <p>The royal look is ready</p>
-        <h1>Pure magic!</h1>
-        <button type="button" id="play-again">Make another look</button>
-      </div>
     </div>
 
     <section class="bottom-dock" aria-live="polite">
@@ -62,6 +56,7 @@ app.innerHTML = `
   <div id="tool-cursor" class="tool-cursor" aria-hidden="true"><img id="cursor-image" src="${ASSET_MANIFEST.tools.blush}" alt="" /></div>
 `
 
+const gameShell = document.querySelector<HTMLElement>('.game-shell')!
 const stage = document.querySelector<HTMLDivElement>('#portrait-stage')!
 const paintCanvas = document.querySelector<HTMLCanvasElement>('#paint-canvas')!
 const revealCanvas = document.querySelector<HTMLCanvasElement>('#reveal-canvas')!
@@ -79,7 +74,6 @@ const progressLabel = document.querySelector<HTMLSpanElement>('#progress-label')
 const progressFill = document.querySelector<HTMLElement>('#progress-fill')!
 const progressValue = document.querySelector<HTMLElement>('#progress-value')!
 const toolTray = document.querySelector<HTMLElement>('#tool-tray')!
-const finishCard = document.querySelector<HTMLDivElement>('#finish-card')!
 
 const makeMask = () => {
   const canvas = document.createElement('canvas')
@@ -89,12 +83,14 @@ const makeMask = () => {
 }
 
 const targetMask = makeMask()
+const softTargetMask = makeMask()
 const guideTemplate = makeMask()
 const rawBrushMask = makeMask()
 const activeMask = makeMask()
 const lockedMask = makeMask()
 const compositeMask = makeMask()
 const targetCtx = targetMask.getContext('2d')!
+const softTargetCtx = softTargetMask.getContext('2d')!
 const guideTemplateCtx = guideTemplate.getContext('2d')!
 const rawBrushCtx = rawBrushMask.getContext('2d')!
 const activeMaskCtx = activeMask.getContext('2d')!
@@ -108,6 +104,7 @@ let covered = new Set<number>()
 let isPainting = false
 let lastPoint: Point | undefined
 let isFinishing = false
+let isFinalLook = false
 let helperTimer: number | undefined
 
 const finishedPortrait = new Image()
@@ -126,24 +123,47 @@ const cursorTipOffsets: Record<MakeupId, { x: string; y: string }> = {
 const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boolean) => {
   context.beginPath()
   if (step.id === 'blush') {
-    context.ellipse(355, 665, 96, 65, -0.16, 0, Math.PI * 2)
-    context.ellipse(767, 665, 96, 65, 0.16, 0, Math.PI * 2)
+    // These deliberately trace the two pink areas in the finished portrait rather
+    // than using oversized circles, so reveal pixels never spill across the nose,
+    // eyes, or jawline.
+    context.moveTo(278, 659)
+    context.bezierCurveTo(284, 620, 320, 595, 364, 597)
+    context.bezierCurveTo(409, 599, 444, 630, 447, 667)
+    context.bezierCurveTo(447, 704, 411, 731, 365, 735)
+    context.bezierCurveTo(319, 737, 283, 708, 278, 659)
+    context.closePath()
+    context.moveTo(675, 667)
+    context.bezierCurveTo(678, 630, 713, 599, 758, 597)
+    context.bezierCurveTo(802, 595, 838, 620, 844, 659)
+    context.bezierCurveTo(839, 708, 803, 737, 757, 735)
+    context.bezierCurveTo(711, 731, 675, 704, 675, 667)
+    context.closePath()
   }
   if (step.id === 'shadow') {
-    context.moveTo(337, 537); context.quadraticCurveTo(423, 464, 511, 534); context.quadraticCurveTo(422, 558, 337, 537); context.closePath()
-    context.moveTo(611, 534); context.quadraticCurveTo(699, 464, 785, 537); context.quadraticCurveTo(700, 558, 611, 534); context.closePath()
+    context.moveTo(344, 528)
+    context.bezierCurveTo(366, 487, 410, 476, 456, 487)
+    context.bezierCurveTo(480, 493, 500, 510, 510, 530)
+    context.bezierCurveTo(472, 516, 431, 513, 391, 520)
+    context.bezierCurveTo(371, 524, 355, 530, 344, 528)
+    context.closePath()
+    context.moveTo(612, 530)
+    context.bezierCurveTo(622, 510, 642, 493, 666, 487)
+    context.bezierCurveTo(712, 476, 756, 487, 778, 528)
+    context.bezierCurveTo(767, 530, 751, 524, 731, 520)
+    context.bezierCurveTo(691, 513, 650, 516, 612, 530)
+    context.closePath()
   }
   if (step.id === 'mascara') {
-    context.moveTo(338, 520); context.quadraticCurveTo(422, 485, 508, 520)
-    context.moveTo(614, 520); context.quadraticCurveTo(700, 485, 784, 520)
+    context.moveTo(350, 530); context.quadraticCurveTo(423, 494, 508, 530)
+    context.moveTo(614, 530); context.quadraticCurveTo(699, 494, 772, 530)
   }
   if (step.id === 'lips') {
-    context.moveTo(459, 726)
-    context.quadraticCurveTo(488, 702, 528, 714)
-    context.quadraticCurveTo(559, 694, 592, 714)
-    context.quadraticCurveTo(632, 702, 663, 726)
-    context.quadraticCurveTo(621, 764, 561, 769)
-    context.quadraticCurveTo(501, 764, 459, 726)
+    context.moveTo(467, 728)
+    context.bezierCurveTo(487, 710, 508, 709, 528, 719)
+    context.bezierCurveTo(545, 705, 566, 705, 582, 719)
+    context.bezierCurveTo(605, 709, 630, 712, 650, 729)
+    context.bezierCurveTo(627, 748, 596, 758, 560, 759)
+    context.bezierCurveTo(525, 758, 493, 747, 467, 728)
     context.closePath()
   }
   if (step.id === 'sparkles') {
@@ -165,7 +185,7 @@ const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boo
   }
   if (step.id === 'mascara') {
     context.lineCap = 'round'
-    context.lineWidth = fill ? 21 : 15
+    context.lineWidth = fill ? 16 : 10
     context.stroke()
   } else if (fill) context.fill()
   else context.stroke()
@@ -203,6 +223,15 @@ const drawTargetMask = (step: MakeupStep) => {
   withPath(targetCtx, step, true)
   targetCtx.restore()
   targetPixels = targetCtx.getImageData(0, 0, ART_WIDTH, ART_HEIGHT).data
+
+  // The hit region stays hard-edged for precise painting and progress scoring.
+  // The image reveal gets a tiny feather, which lets the pre-rendered makeup
+  // blend into the untouched portrait instead of showing a sticker-like edge.
+  softTargetCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
+  softTargetCtx.save()
+  softTargetCtx.filter = 'blur(6px)'
+  softTargetCtx.drawImage(targetMask, 0, 0)
+  softTargetCtx.restore()
 }
 
 const buildSamples = (step: MakeupStep) => {
@@ -257,7 +286,7 @@ const stamp = (point: Point, strength = 1) => {
   activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
   activeMaskCtx.drawImage(rawBrushMask, 0, 0)
   activeMaskCtx.globalCompositeOperation = 'destination-in'
-  activeMaskCtx.drawImage(targetMask, 0, 0)
+  activeMaskCtx.drawImage(softTargetMask, 0, 0)
   activeMaskCtx.globalCompositeOperation = 'source-over'
   renderReveal()
 
@@ -324,7 +353,7 @@ const finishStep = () => {
   if (isFinishing) return
   isFinishing = true
   clearHelperTimer()
-  lockedMaskCtx.drawImage(targetMask, 0, 0)
+  lockedMaskCtx.drawImage(softTargetMask, 0, 0)
   rawBrushCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
   activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
   covered = new Set(samples.map((_, index) => index))
@@ -336,8 +365,8 @@ const finishStep = () => {
   instruction.textContent = `Perfect! ${currentStep().name} is complete.`
   window.setTimeout(() => {
     if (currentStepIndex === steps.length - 1) {
-      finishCard.hidden = false
-      finishCard.classList.add('show')
+      isFinalLook = true
+      gameShell.classList.add('final-look')
       toolCursor.classList.remove('shown')
       return
     }
@@ -387,7 +416,7 @@ const toImagePoint = (event: PointerEvent): Point => {
 }
 
 const moveToolCursor = (event: PointerEvent) => {
-  if (isFinishing || !finishCard.hidden) {
+  if (isFinishing || isFinalLook) {
     toolCursor.classList.remove('shown')
     return
   }
@@ -397,7 +426,7 @@ const moveToolCursor = (event: PointerEvent) => {
 }
 
 paintCanvas.addEventListener('pointerdown', (event) => {
-  if (!finishCard.hidden) return
+  if (isFinalLook) return
   paintCanvas.setPointerCapture(event.pointerId)
   isPainting = true
   moveToolCursor(event)
@@ -427,7 +456,6 @@ paintCanvas.addEventListener('pointerenter', moveToolCursor)
 
 document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
 document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', () => window.location.reload())
-document.querySelector<HTMLButtonElement>('#play-again')!.addEventListener('click', () => window.location.reload())
 
 finishedPortrait.addEventListener('load', () => prepareStep(), { once: true })
 if (finishedPortrait.complete) prepareStep()
