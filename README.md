@@ -10,12 +10,12 @@ A mobile-first Three.js makeup painter. Users orbit and pinch-zoom a 3D original
 ## What is implemented
 
 - Three.js / WebGL renderer with capped device pixel ratio for mobile performance
-- A procedural, original stylized princess portrait: skin, eyes, hair, tiara, neck, and shoulders are real 3D geometry
+- A refined, original stylized princess portrait with a sculpted jaw/chin, dimensional eyes, nose, lips, hair, neck, and shoulders
 - Raycast-to-UV brush painting on a 1024×1024 `CanvasTexture` (not a screen-space overlay)
 - Soft blush, eye shadow, lip glaze, highlighter, and freckles
 - Touch orbit / pinch zoom in explore mode; centered, camera-locked paint mode
-- Brush size, clear, undo, front-view, and zoom controls, with a compact mobile dock
-- A three-step blush / shadow / lip game loop with a completion reveal and a save-look action
+- Per-tool brush size, custom colour, and sheer-to-opaque colour controls, plus clear, undo, front-view, and zoom controls on desktop and mobile
+- A three-step blush / shadow / lip game loop that places an animated princess crown on the finished look, then offers a save-look action
 
 ## Production-quality character path
 

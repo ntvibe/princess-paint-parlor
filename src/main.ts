@@ -19,11 +19,11 @@ const faceU = 0.25
 const faceV = 0.51
 
 const tools: Tool[] = [
-  { id: 'blush', label: 'Soft blush', eyebrow: 'Cheeks', color: '#ed7899', size: 86, opacity: 0.23, blend: 'multiply' },
-  { id: 'shadow', label: 'Velvet shadow', eyebrow: 'Eyes', color: '#a675d1', size: 50, opacity: 0.32, blend: 'multiply' },
-  { id: 'lip', label: 'Rose glaze', eyebrow: 'Lips', color: '#b74368', size: 36, opacity: 0.5, blend: 'source-over' },
-  { id: 'highlight', label: 'Pearl light', eyebrow: 'Glow', color: '#fff4dc', size: 42, opacity: 0.32, blend: 'screen' },
-  { id: 'freckles', label: 'Sun freckles', eyebrow: 'Details', color: '#b46c58', size: 17, opacity: 0.34, blend: 'multiply' },
+  { id: 'blush', label: 'Soft blush', eyebrow: 'Cheeks', color: '#d9799b', size: 72, opacity: 0.12, blend: 'multiply' },
+  { id: 'shadow', label: 'Velvet shadow', eyebrow: 'Eyes', color: '#8665ad', size: 44, opacity: 0.14, blend: 'multiply' },
+  { id: 'lip', label: 'Rose glaze', eyebrow: 'Lips', color: '#ad536f', size: 31, opacity: 0.22, blend: 'source-over' },
+  { id: 'highlight', label: 'Pearl light', eyebrow: 'Glow', color: '#fff4dc', size: 36, opacity: 0.15, blend: 'screen' },
+  { id: 'freckles', label: 'Sun freckles', eyebrow: 'Details', color: '#a46350', size: 16, opacity: 0.18, blend: 'multiply' },
 ]
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -49,6 +49,10 @@ app.innerHTML = `
           <div><span>Brush size</span><output id="brush-output">86</output></div>
           <input id="brush-size" type="range" min="18" max="150" value="86" aria-label="Brush size" />
         </div>
+        <div class="finish-adjusters" aria-label="Active makeup settings">
+          <label class="color-control"><span>Colour</span><input id="brush-color" type="color" value="#d9799b" aria-label="Makeup colour" /></label>
+          <label class="range-control"><span>Colour transparency <output id="opacity-output">88%</output></span><input id="opacity-range" type="range" min="5" max="65" value="12" aria-label="Colour transparency" /></label>
+        </div>
         <div class="panel-actions">
           <button id="undo-button" type="button" disabled>↶ Undo</button>
           <button id="clear-button" type="button">Clear canvas</button>
@@ -73,20 +77,25 @@ app.innerHTML = `
         <h2 id="finish-title">Soft blush</h2>
         <div class="swatch-row" id="swatch-row"></div>
         <div class="finish-copy"><span>UV texture</span><b id="texture-status">Ready</b></div>
-        <div class="finish-copy"><span>Brush opacity</span><b id="opacity-status">23%</b></div>
+        <div class="finish-copy"><span>Colour transparency</span><b id="opacity-status">88%</b></div>
         <div class="production-note"><span>✦</span><p>Makeup is composited into the face’s live texture—not projected over the screen.</p></div>
       </aside>
     </section>
 
     <section class="mobile-dock" aria-label="Mobile makeup controls">
       <div class="mobile-tool-strip" id="mobile-tool-strip"></div>
+      <div class="mobile-adjusters" aria-label="Active makeup settings">
+        <label class="mobile-color-control" title="Makeup colour"><input id="mobile-brush-color" type="color" value="#d9799b" aria-label="Makeup colour" /></label>
+        <label><span>Size</span><input id="mobile-brush-size" type="range" min="18" max="150" value="86" aria-label="Brush size" /></label>
+        <label><span>Sheer</span><input id="mobile-opacity-range" type="range" min="5" max="65" value="12" aria-label="Colour transparency" /></label>
+      </div>
       <div class="mobile-dock-bottom"><span id="mobile-tool-name">Soft blush</span><button id="mobile-undo" type="button" disabled>↶</button><button id="mobile-clear" type="button">Clear</button></div>
     </section>
     <div class="toast" id="toast" role="status"></div>
     <section class="reveal" id="reveal" aria-hidden="true" aria-label="Completed makeup look">
       <div class="reveal-card">
         <span class="reveal-sparkle">✦</span>
-        <p>LOOK COMPLETE</p>
+        <p>PRINCESS CROWN PLACED</p>
         <h2>Radiant from every angle</h2>
         <span class="reveal-line"></span>
         <div class="reveal-actions"><button id="keep-painting" type="button">Keep painting</button><button id="save-look" class="primary" type="button">Save look</button></div>
@@ -100,6 +109,12 @@ const toolList = document.querySelector<HTMLDivElement>('#tool-list')!
 const mobileToolStrip = document.querySelector<HTMLDivElement>('#mobile-tool-strip')!
 const brushInput = document.querySelector<HTMLInputElement>('#brush-size')!
 const brushOutput = document.querySelector<HTMLOutputElement>('#brush-output')!
+const brushColor = document.querySelector<HTMLInputElement>('#brush-color')!
+const opacityRange = document.querySelector<HTMLInputElement>('#opacity-range')!
+const opacityOutput = document.querySelector<HTMLOutputElement>('#opacity-output')!
+const mobileBrushColor = document.querySelector<HTMLInputElement>('#mobile-brush-color')!
+const mobileBrushInput = document.querySelector<HTMLInputElement>('#mobile-brush-size')!
+const mobileOpacityRange = document.querySelector<HTMLInputElement>('#mobile-opacity-range')!
 const undoButton = document.querySelector<HTMLButtonElement>('#undo-button')!
 const mobileUndo = document.querySelector<HTMLButtonElement>('#mobile-undo')!
 const clearButton = document.querySelector<HTMLButtonElement>('#clear-button')!
@@ -132,6 +147,7 @@ let toastTimer: number | undefined
 const coreTools = new Set<ToolId>(['blush', 'shadow', 'lip'])
 const exploredTools = new Set<ToolId>()
 let lookComplete = false
+let crownPlaced = false
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8))
@@ -239,23 +255,40 @@ const skinMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.6,
   metalness: 0,
 })
-const headGeometry = new THREE.SphereGeometry(1, 96, 72)
+function createSculptedHeadGeometry() {
+  const geometry = new THREE.SphereGeometry(1, 96, 72)
+  const positions = geometry.getAttribute('position')
+  for (let index = 0; index < positions.count; index += 1) {
+    const x = positions.getX(index)
+    const y = positions.getY(index)
+    const z = positions.getZ(index)
+    const jawBlend = THREE.MathUtils.smoothstep(y, -0.88, 0.26)
+    const foreheadBlend = THREE.MathUtils.smoothstep(y, 0.26, 0.9)
+    const width = 0.75 + jawBlend * 0.22 + foreheadBlend * 0.06
+    const chinLength = y < -0.36 ? 1 + (-y - 0.36) * 0.14 : 1
+    positions.setXYZ(index, x * width, y * chinLength, z * (0.96 + Math.max(0, y) * 0.045))
+  }
+  positions.needsUpdate = true
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+const headGeometry = createSculptedHeadGeometry()
 const head = new THREE.Mesh(headGeometry, skinMaterial)
 head.name = 'Paintable UV face'
 head.scale.set(1.21, 1.42, 1.08)
 head.position.y = 0.6
 world.add(head)
 
-const skinDetail = new THREE.MeshStandardMaterial({ color: '#e7a58e', roughness: 0.68 })
+const skinDetail = new THREE.MeshStandardMaterial({ color: '#f6c5b1', roughness: 0.68 })
 const warmSkin = new THREE.MeshStandardMaterial({ color: '#f0b39d', roughness: 0.6 })
 const darkHair = new THREE.MeshPhysicalMaterial({ color: '#542b4b', roughness: 0.3, metalness: 0.05, clearcoat: 0.22, clearcoatRoughness: 0.25 })
-const hairHigh = new THREE.MeshPhysicalMaterial({ color: '#9c596f', roughness: 0.35, metalness: 0.04, clearcoat: 0.3 })
 const white = new THREE.MeshStandardMaterial({ color: '#fff9f4', roughness: 0.43 })
 const iris = new THREE.MeshPhysicalMaterial({ color: '#4b7895', roughness: 0.22, clearcoat: 0.45 })
 const pupil = new THREE.MeshStandardMaterial({ color: '#211b2b', roughness: 0.35 })
 const gold = new THREE.MeshPhysicalMaterial({ color: '#f5bc65', metalness: 0.72, roughness: 0.24, clearcoat: 0.25 })
 const pearl = new THREE.MeshPhysicalMaterial({ color: '#fff0da', metalness: 0.08, roughness: 0.22, clearcoat: 0.45 })
-const lipMaterial = new THREE.MeshPhysicalMaterial({ color: '#c96481', roughness: 0.27, clearcoat: 0.45, clearcoatRoughness: 0.16 })
+const lipMaterial = new THREE.MeshPhysicalMaterial({ color: '#ae6b7e', roughness: 0.43, clearcoat: 0.18, clearcoatRoughness: 0.3 })
 const browMaterial = new THREE.MeshPhysicalMaterial({ color: '#4c293a', roughness: 0.48, clearcoat: 0.08 })
 const lashMaterial = new THREE.MeshPhysicalMaterial({ color: '#291c2a', roughness: 0.42 })
 
@@ -272,11 +305,11 @@ ellipsoid(new THREE.CylinderGeometry(0.43, 0.48, 1.25, 32), warmSkin, [0, -1.12,
 ellipsoid(new THREE.SphereGeometry(1, 48, 32), new THREE.MeshStandardMaterial({ color: '#8f5a91', roughness: 0.57 }), [0, -2.02, -0.14], [1.72, 0.53, 0.86])
 
 // Eyes sit proud of the UV face. Their whites and irises retain a polished, dimensional look at mobile zoom.
-for (const x of [-0.42, 0.42]) {
-  ellipsoid(new THREE.SphereGeometry(1, 36, 24), white, [x, 0.82, 0.96], [0.285, 0.19, 0.105])
-  ellipsoid(new THREE.SphereGeometry(1, 32, 20), iris, [x, 0.82, 1.07], [0.125, 0.125, 0.042])
-  ellipsoid(new THREE.SphereGeometry(1, 28, 18), pupil, [x, 0.82, 1.115], [0.052, 0.058, 0.019])
-  ellipsoid(new THREE.SphereGeometry(1, 16, 12), pearl, [x - 0.035, 0.865, 1.14], [0.021, 0.027, 0.008])
+for (const x of [-0.36, 0.36]) {
+  ellipsoid(new THREE.SphereGeometry(1, 36, 24), white, [x, 0.82, 0.99], [0.215, 0.142, 0.076])
+  ellipsoid(new THREE.SphereGeometry(1, 32, 20), iris, [x, 0.82, 1.066], [0.09, 0.09, 0.031])
+  ellipsoid(new THREE.SphereGeometry(1, 28, 18), pupil, [x, 0.82, 1.095], [0.037, 0.043, 0.014])
+  ellipsoid(new THREE.SphereGeometry(1, 16, 12), pearl, [x - 0.026, 0.85, 1.11], [0.014, 0.018, 0.006])
 
   const direction = Math.sign(x)
   const browCurve = new THREE.CatmullRomCurve3([
@@ -294,39 +327,36 @@ for (const x of [-0.42, 0.42]) {
   world.add(new THREE.Mesh(new THREE.TubeGeometry(lashCurve, 18, 0.018, 6, false), lashMaterial))
 }
 
-ellipsoid(new THREE.SphereGeometry(1, 32, 24), skinDetail, [0, 0.39, 1.055], [0.12, 0.2, 0.11])
-ellipsoid(new THREE.SphereGeometry(1, 28, 18), lipMaterial, [-0.1, 0.03, 1.045], [0.19, 0.055, 0.045])
-ellipsoid(new THREE.SphereGeometry(1, 28, 18), lipMaterial, [0.1, 0.03, 1.045], [0.19, 0.055, 0.045])
+ellipsoid(new THREE.SphereGeometry(1, 32, 24), skinDetail, [0, 0.49, 1.018], [0.052, 0.18, 0.05])
+ellipsoid(new THREE.SphereGeometry(1, 32, 24), skinDetail, [0, 0.32, 1.058], [0.082, 0.07, 0.065])
+for (const x of [-0.067, 0.067]) ellipsoid(new THREE.SphereGeometry(1, 20, 16), skinDetail, [x, 0.305, 1.045], [0.038, 0.032, 0.036])
+const upperLip = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-0.23, 0.02, 1.075), new THREE.Vector3(-0.095, 0.065, 1.105), new THREE.Vector3(0, 0.035, 1.115), new THREE.Vector3(0.095, 0.065, 1.105), new THREE.Vector3(0.23, 0.02, 1.075),
+])
+const lowerLip = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-0.21, -0.002, 1.08), new THREE.Vector3(0, -0.064, 1.11), new THREE.Vector3(0.21, -0.002, 1.08),
+])
+world.add(new THREE.Mesh(new THREE.TubeGeometry(upperLip, 28, 0.022, 10, false), lipMaterial))
+world.add(new THREE.Mesh(new THREE.TubeGeometry(lowerLip, 28, 0.026, 10, false), lipMaterial))
 ellipsoid(new THREE.SphereGeometry(1, 20, 16), skinDetail, [-1.17, 0.55, 0], [0.11, 0.18, 0.06])
 ellipsoid(new THREE.SphereGeometry(1, 20, 16), skinDetail, [1.17, 0.55, 0], [0.11, 0.18, 0.06])
 
-// Voluminous hair is modelled as a back cap plus individually curved strands, so it holds up from any orbit angle.
+// The broad back cap reads as a polished bob from every orbit angle without obstructing the paint surface.
 ellipsoid(new THREE.SphereGeometry(1, 72, 48), darkHair, [0, 0.92, -0.18], [1.34, 1.53, 1.04])
-for (let index = 0; index < 9; index += 1) {
-  const t = index / 8
-  const x = -1.02 + t * 2.04
-  const side = Math.sign(x || 1)
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(x * 0.84, 1.84 - 0.13 * Math.abs(x), 0.51),
-    new THREE.Vector3(x * 1.02, 1.43, 0.86),
-    new THREE.Vector3(x * 0.83 + side * 0.11, 1.06 + (index % 2) * 0.06, 1.04),
-  ])
-  const strand = new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 0.102 - Math.abs(index - 4) * 0.005, 10, false), index % 2 === 0 ? darkHair : hairHigh)
-  world.add(strand)
-}
-for (const x of [-0.72, -0.36, 0, 0.36, 0.72]) {
-  const curl = ellipsoid(new THREE.SphereGeometry(1, 32, 20), x === 0 ? hairHigh : darkHair, [x, 1.44 - Math.abs(x) * 0.17, 0.81], [0.34, 0.24, 0.15])
-  curl.rotation.z = x * -0.33
-}
+const frontHairCap = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 36, 0, Math.PI * 2, 0, Math.PI / 2), darkHair)
+frontHairCap.position.set(0, 1.25, 0)
+frontHairCap.scale.set(1.25, 1.18, 1.1)
+world.add(frontHairCap)
 
 // Tiara and gems provide the recognisable princess cue, while staying original to this model.
 const tiara = new THREE.Group()
-tiara.position.set(0, 1.72, 0.7)
+tiara.position.set(0, 3.65, 1.16)
+tiara.visible = false
 world.add(tiara)
 const crownCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(-0.74, -0.04, 0), new THREE.Vector3(-0.38, 0.18, 0.06), new THREE.Vector3(0, 0.28, 0.08), new THREE.Vector3(0.38, 0.18, 0.06), new THREE.Vector3(0.74, -0.04, 0),
 ])
-tiara.add(new THREE.Mesh(new THREE.TubeGeometry(crownCurve, 32, 0.035, 10, false), gold))
+tiara.add(new THREE.Mesh(new THREE.TubeGeometry(crownCurve, 32, 0.05, 10, false), gold))
 for (const [x, y, s] of [[-0.36, 0.17, 0.075], [0, 0.31, 0.11], [0.36, 0.17, 0.075]] as const) {
   ellipsoid(new THREE.OctahedronGeometry(1, 1), pearl, [x, y, 0.075], [s, s * 1.28, s], tiara)
 }
@@ -356,7 +386,15 @@ function updateToolUI() {
   mobileToolName.textContent = currentTool.label
   brushOutput.value = String(brushSize)
   brushInput.value = String(brushSize)
-  opacityStatus.textContent = `${Math.round(currentTool.opacity * 100)}%`
+  mobileBrushInput.value = String(brushSize)
+  brushColor.value = currentTool.color
+  mobileBrushColor.value = currentTool.color
+  const opacityPercent = Math.round(currentTool.opacity * 100)
+  opacityRange.value = String(opacityPercent)
+  mobileOpacityRange.value = String(opacityPercent)
+  const transparency = 100 - opacityPercent
+  opacityStatus.textContent = `${transparency}%`
+  opacityOutput.value = `${transparency}%`
   swatchRow.innerHTML = tools.map((tool) => `<button type="button" data-tool="${tool.id}" class="material-swatch${tool.id === currentTool.id ? ' selected' : ''}" style="--swatch:${tool.color}" aria-label="Use ${tool.label}"></button>`).join('')
 }
 
@@ -369,11 +407,13 @@ function updateProgress() {
 function completeLook() {
   if (lookComplete) return
   lookComplete = true
+  crownPlaced = true
+  tiara.visible = true
   updateProgress()
   window.setTimeout(() => {
     reveal.classList.add('visible')
     reveal.setAttribute('aria-hidden', 'false')
-  }, 500)
+  }, 900)
 }
 
 function recordPaintedTool() {
@@ -424,6 +464,9 @@ function resetLook() {
   clearTexture(false)
   exploredTools.clear()
   lookComplete = false
+  crownPlaced = false
+  tiara.visible = false
+  tiara.position.set(0, 3.65, 1.16)
   updateProgress()
   reveal.classList.remove('visible')
   reveal.setAttribute('aria-hidden', 'true')
@@ -574,7 +617,31 @@ swatchRow.addEventListener('click', (event) => {
 brushInput.addEventListener('input', () => {
   brushSize = Number(brushInput.value)
   brushOutput.value = String(brushSize)
+  mobileBrushInput.value = String(brushSize)
 })
+mobileBrushInput.addEventListener('input', () => {
+  brushSize = Number(mobileBrushInput.value)
+  brushInput.value = String(brushSize)
+  brushOutput.value = String(brushSize)
+})
+function updateColor(value: string) {
+  currentTool.color = value
+  brushColor.value = value
+  mobileBrushColor.value = value
+  updateToolUI()
+}
+function updateOpacity(value: string) {
+  currentTool.opacity = Number(value) / 100
+  opacityRange.value = value
+  mobileOpacityRange.value = value
+  const transparency = 100 - Number(value)
+  opacityStatus.textContent = `${transparency}%`
+  opacityOutput.value = `${transparency}%`
+}
+brushColor.addEventListener('input', () => updateColor(brushColor.value))
+mobileBrushColor.addEventListener('input', () => updateColor(mobileBrushColor.value))
+opacityRange.addEventListener('input', () => updateOpacity(opacityRange.value))
+mobileOpacityRange.addEventListener('input', () => updateOpacity(mobileOpacityRange.value))
 lockButton.addEventListener('click', () => setPaintLock(!paintLocked))
 document.querySelector<HTMLButtonElement>('#front-view')!.addEventListener('click', centerFront)
 document.querySelector<HTMLButtonElement>('#zoom-in')!.addEventListener('click', () => zoom(1))
@@ -609,6 +676,7 @@ function render() {
     camera.lookAt(controls.target)
   } else controls.update()
   world.rotation.y = THREE.MathUtils.lerp(world.rotation.y, 0, 0.025)
+  if (crownPlaced) tiara.position.y = THREE.MathUtils.lerp(tiara.position.y, 1.32, 0.07)
   renderer.render(scene, camera)
   requestAnimationFrame(render)
 }
