@@ -1,579 +1,616 @@
 import './style.css'
-import { ASSET_MANIFEST } from './assets'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
-type Point = { x: number; y: number }
-type MakeupId = 'blush' | 'shadow' | 'mascara' | 'lips' | 'sparkles'
+type ToolId = 'blush' | 'shadow' | 'lip' | 'highlight' | 'freckles'
 
-type MakeupStep = {
-  id: MakeupId
-  name: string
+type Tool = {
+  id: ToolId
   label: string
-  instruction: string
-  help: string
-  brushSize: number
+  eyebrow: string
+  color: string
+  size: number
+  opacity: number
+  blend?: GlobalCompositeOperation
 }
 
-type PrincessId = 'lila' | 'asha' | 'mei' | 'zuri' | 'mira' | 'poppy'
+const textureSize = 1024
+const faceU = 0.25
+const faceV = 0.51
 
-type FaceProfile = {
-  offsetX: number
-  offsetY: number
-  scaleX: number
-  scaleY: number
-}
-
-type Princess = {
-  id: PrincessId
-  name: string
-  subtitle: string
-  base: string
-  finished: string
-  profile: FaceProfile
-}
-
-const ART_WIDTH = 1122
-const ART_HEIGHT = 1402
-const steps: MakeupStep[] = [
-  { id: 'blush', name: 'Rosy Blush', label: 'Blush', instruction: 'Brush only inside the golden cheek shapes.', help: 'Soft circles make the rosy glow.', brushSize: 78 },
-  { id: 'shadow', name: 'Lavender Shadow', label: 'Eyes', instruction: 'Sweep the brush inside both golden eyelids.', help: 'A little purple magic goes a long way.', brushSize: 54 },
-  { id: 'mascara', name: 'Twinkle Lashes', label: 'Lashes', instruction: 'Trace gently along both golden lash lines.', help: 'Slow strokes make neat lashes.', brushSize: 32 },
-  { id: 'lips', name: 'Berry Smile', label: 'Lips', instruction: 'Color just inside the tiny golden smile.', help: 'Follow the lip shape from side to side.', brushSize: 42 },
-  { id: 'sparkles', name: 'Fairy Sparkles', label: 'Magic', instruction: 'Tap every little golden sparkle star!', help: 'Tap, tap — the fairy dust will appear.', brushSize: 35 },
-]
-
-const princesses: Princess[] = [
-  { id: 'lila', name: 'Lila', subtitle: 'Rose crown', base: ASSET_MANIFEST.princessBase, finished: ASSET_MANIFEST.princessFinished, profile: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 } },
-  { id: 'asha', name: 'Asha', subtitle: 'Sun crown', base: ASSET_MANIFEST.princesses.asha.base, finished: ASSET_MANIFEST.princesses.asha.finished, profile: { offsetX: 0, offsetY: 14, scaleX: 1, scaleY: 1 } },
-  { id: 'mei', name: 'Mei', subtitle: 'Jade crown', base: ASSET_MANIFEST.princesses.mei.base, finished: ASSET_MANIFEST.princesses.mei.finished, profile: { offsetX: 0, offsetY: 5, scaleX: 1.08, scaleY: 1.02 } },
-  { id: 'zuri', name: 'Zuri', subtitle: 'Golden curls', base: ASSET_MANIFEST.princesses.zuri.base, finished: ASSET_MANIFEST.princesses.zuri.finished, profile: { offsetX: 0, offsetY: 7, scaleX: 1.14, scaleY: 1.02 } },
-  { id: 'mira', name: 'Mira', subtitle: 'Amethyst braid', base: ASSET_MANIFEST.princesses.mira.base, finished: ASSET_MANIFEST.princesses.mira.finished, profile: { offsetX: 0, offsetY: -10, scaleX: 1.02, scaleY: 1 } },
-  { id: 'poppy', name: 'Poppy', subtitle: 'Rose-gold crown', base: ASSET_MANIFEST.princesses.poppy.base, finished: ASSET_MANIFEST.princesses.poppy.finished, profile: { offsetX: 0, offsetY: 95, scaleX: 1, scaleY: 1.05 } },
+const tools: Tool[] = [
+  { id: 'blush', label: 'Soft blush', eyebrow: 'Cheeks', color: '#ed7899', size: 86, opacity: 0.23, blend: 'multiply' },
+  { id: 'shadow', label: 'Velvet shadow', eyebrow: 'Eyes', color: '#a675d1', size: 50, opacity: 0.32, blend: 'multiply' },
+  { id: 'lip', label: 'Rose glaze', eyebrow: 'Lips', color: '#b74368', size: 36, opacity: 0.5, blend: 'source-over' },
+  { id: 'highlight', label: 'Pearl light', eyebrow: 'Glow', color: '#fff4dc', size: 42, opacity: 0.32, blend: 'screen' },
+  { id: 'freckles', label: 'Sun freckles', eyebrow: 'Details', color: '#b46c58', size: 17, opacity: 0.34, blend: 'multiply' },
 ]
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
-  <main class="game-shell selecting">
-    <img class="scene-backdrop" src="${ASSET_MANIFEST.princessBase}" alt="" aria-hidden="true" />
-    <div class="scene-wash" aria-hidden="true"></div>
+  <main class="studio-shell">
+    <header class="topbar">
+      <a class="wordmark" href="#studio" aria-label="Luma Face Studio home">
+        <span class="mark">✦</span><span>LUMA<br /><b>FACE STUDIO</b></span>
+      </a>
+      <div class="mode-readout" id="mode-readout"><i></i><span>Explore the face</span></div>
+      <div class="top-actions">
+        <div class="look-progress" id="look-progress" aria-live="polite"><span class="progress-orb">✦</span><span><small>Look progress</small><b id="progress-label">0 / 3 touches</b></span></div>
+        <button class="quiet-button desktop-only" id="reset-button" type="button">Reset look</button>
+        <button class="lock-button" id="lock-button" type="button" aria-pressed="false"><span class="lock-icon">⌾</span><span id="lock-label">Lock to paint</span></button>
+      </div>
+    </header>
 
-    <section class="top-hud" aria-label="Game controls">
-      <div class="brand"><span class="brand-crown">♕</span><span>Princess<br /><b>Paint Parlor</b></span></div>
-      <div class="step-counter" id="step-counter">1 <small>of</small> 5</div>
-      <button class="reset-button" id="reset-button" type="button">↺ <span>Start over</span></button>
+    <section class="studio-layout" id="studio">
+      <aside class="tool-panel" aria-label="Makeup tools">
+        <div class="panel-heading"><p>Beauty kit</p><h1>Build the look</h1></div>
+        <div class="tool-list" id="tool-list"></div>
+        <div class="brush-control">
+          <div><span>Brush size</span><output id="brush-output">86</output></div>
+          <input id="brush-size" type="range" min="18" max="150" value="86" aria-label="Brush size" />
+        </div>
+        <div class="panel-actions">
+          <button id="undo-button" type="button" disabled>↶ Undo</button>
+          <button id="clear-button" type="button">Clear canvas</button>
+        </div>
+      </aside>
+
+      <section class="viewport-wrap" aria-label="3D makeup painting viewport">
+        <canvas id="three-canvas"></canvas>
+        <div class="viewport-falloff" aria-hidden="true"></div>
+        <div class="touch-hint" id="touch-hint"><span class="gesture-icon">⌁</span><div><b>Turn the head</b><small>Drag or pinch to explore the model</small></div></div>
+        <div class="paint-indicator" id="paint-indicator" aria-hidden="true"></div>
+        <div class="paint-mode-label" id="paint-mode-label" aria-hidden="true"><span>✦</span> Camera locked · paint directly on UV texture</div>
+        <div class="view-controls" aria-label="Camera controls">
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <button id="front-view" type="button" aria-label="Center front view">◎</button>
+        </div>
+      </section>
+
+      <aside class="finish-panel">
+        <p>Live material</p>
+        <h2 id="finish-title">Soft blush</h2>
+        <div class="swatch-row" id="swatch-row"></div>
+        <div class="finish-copy"><span>UV texture</span><b id="texture-status">Ready</b></div>
+        <div class="finish-copy"><span>Brush opacity</span><b id="opacity-status">23%</b></div>
+        <div class="production-note"><span>✦</span><p>Makeup is composited into the face’s live texture—not projected over the screen.</p></div>
+      </aside>
     </section>
 
-    <section id="character-picker" class="character-picker" aria-labelledby="character-picker-title">
-      <div class="picker-glass">
-        <p>Princess Paint Parlor</p>
-        <h1 id="character-picker-title">Choose a royal friend</h1>
-        <span>Pick a princess, then paint her magical look.</span>
-        <div id="character-grid" class="character-grid"></div>
+    <section class="mobile-dock" aria-label="Mobile makeup controls">
+      <div class="mobile-tool-strip" id="mobile-tool-strip"></div>
+      <div class="mobile-dock-bottom"><span id="mobile-tool-name">Soft blush</span><button id="mobile-undo" type="button" disabled>↶</button><button id="mobile-clear" type="button">Clear</button></div>
+    </section>
+    <div class="toast" id="toast" role="status"></div>
+    <section class="reveal" id="reveal" aria-hidden="true" aria-label="Completed makeup look">
+      <div class="reveal-card">
+        <span class="reveal-sparkle">✦</span>
+        <p>LOOK COMPLETE</p>
+        <h2>Radiant from every angle</h2>
+        <span class="reveal-line"></span>
+        <div class="reveal-actions"><button id="keep-painting" type="button">Keep painting</button><button id="save-look" class="primary" type="button">Save look</button></div>
       </div>
     </section>
-
-    <div id="portrait-stage" class="portrait-stage" aria-label="Princess makeup canvas">
-      <img id="portrait-image" class="portrait-image" src="${ASSET_MANIFEST.princessBase}" alt="Princess ready for makeup" />
-      <canvas id="reveal-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
-      <canvas id="guide-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-hidden="true"></canvas>
-      <canvas id="paint-canvas" width="${ART_WIDTH}" height="${ART_HEIGHT}" aria-label="Paint inside the golden guide using the current makeup tool"></canvas>
-      <div id="sparkle-field" class="sparkle-field" aria-hidden="true"></div>
-    </div>
-
-    <section class="bottom-dock" aria-live="polite">
-      <div class="instruction-glass">
-        <img id="active-tool-image" src="${ASSET_MANIFEST.tools.blush}" alt="" />
-        <div><p id="step-name">Rosy Blush</p><h1 id="instruction">Brush only inside the golden cheek shapes.</h1></div>
-        <button id="magic-help" type="button" title="Use a little fairy magic">✦<span>Help</span></button>
-      </div>
-      <div class="progress-line"><span id="progress-label">Blush</span><div><i id="progress-fill"></i></div><b id="progress-value">0%</b></div>
-      <nav id="tool-tray" class="tool-tray" aria-label="Makeup steps"></nav>
-    </section>
-    <button id="final-close" class="final-close" type="button" aria-label="Choose another princess" title="Choose another princess">×</button>
   </main>
-  <div id="tool-cursor" class="tool-cursor" aria-hidden="true"><img id="cursor-image" src="${ASSET_MANIFEST.tools.blush}" alt="" /></div>
 `
 
-const gameShell = document.querySelector<HTMLElement>('.game-shell')!
-const stage = document.querySelector<HTMLDivElement>('#portrait-stage')!
-const sceneBackdrop = document.querySelector<HTMLImageElement>('.scene-backdrop')!
-const portraitImage = document.querySelector<HTMLImageElement>('#portrait-image')!
-const characterPicker = document.querySelector<HTMLElement>('#character-picker')!
-const characterGrid = document.querySelector<HTMLElement>('#character-grid')!
-const paintCanvas = document.querySelector<HTMLCanvasElement>('#paint-canvas')!
-const revealCanvas = document.querySelector<HTMLCanvasElement>('#reveal-canvas')!
-const guideCanvas = document.querySelector<HTMLCanvasElement>('#guide-canvas')!
-const revealCtx = revealCanvas.getContext('2d')!
-const guideCtx = guideCanvas.getContext('2d')!
-const sparkleField = document.querySelector<HTMLDivElement>('#sparkle-field')!
-const toolCursor = document.querySelector<HTMLDivElement>('#tool-cursor')!
-const cursorImage = document.querySelector<HTMLImageElement>('#cursor-image')!
-const activeToolImage = document.querySelector<HTMLImageElement>('#active-tool-image')!
-const stepCounter = document.querySelector<HTMLDivElement>('#step-counter')!
-const stepName = document.querySelector<HTMLParagraphElement>('#step-name')!
-const instruction = document.querySelector<HTMLHeadingElement>('#instruction')!
-const progressLabel = document.querySelector<HTMLSpanElement>('#progress-label')!
-const progressFill = document.querySelector<HTMLElement>('#progress-fill')!
-const progressValue = document.querySelector<HTMLElement>('#progress-value')!
-const toolTray = document.querySelector<HTMLElement>('#tool-tray')!
-const finalClose = document.querySelector<HTMLButtonElement>('#final-close')!
+const canvas = document.querySelector<HTMLCanvasElement>('#three-canvas')!
+const toolList = document.querySelector<HTMLDivElement>('#tool-list')!
+const mobileToolStrip = document.querySelector<HTMLDivElement>('#mobile-tool-strip')!
+const brushInput = document.querySelector<HTMLInputElement>('#brush-size')!
+const brushOutput = document.querySelector<HTMLOutputElement>('#brush-output')!
+const undoButton = document.querySelector<HTMLButtonElement>('#undo-button')!
+const mobileUndo = document.querySelector<HTMLButtonElement>('#mobile-undo')!
+const clearButton = document.querySelector<HTMLButtonElement>('#clear-button')!
+const mobileClear = document.querySelector<HTMLButtonElement>('#mobile-clear')!
+const lockButton = document.querySelector<HTMLButtonElement>('#lock-button')!
+const lockLabel = document.querySelector<HTMLSpanElement>('#lock-label')!
+const modeReadout = document.querySelector<HTMLDivElement>('#mode-readout')!
+const paintModeLabel = document.querySelector<HTMLDivElement>('#paint-mode-label')!
+const touchHint = document.querySelector<HTMLDivElement>('#touch-hint')!
+const paintIndicator = document.querySelector<HTMLDivElement>('#paint-indicator')!
+const finishTitle = document.querySelector<HTMLHeadingElement>('#finish-title')!
+const swatchRow = document.querySelector<HTMLDivElement>('#swatch-row')!
+const textureStatus = document.querySelector<HTMLElement>('#texture-status')!
+const opacityStatus = document.querySelector<HTMLElement>('#opacity-status')!
+const mobileToolName = document.querySelector<HTMLElement>('#mobile-tool-name')!
+const toast = document.querySelector<HTMLDivElement>('#toast')!
+const progressLabel = document.querySelector<HTMLElement>('#progress-label')!
+const lookProgress = document.querySelector<HTMLDivElement>('#look-progress')!
+const reveal = document.querySelector<HTMLElement>('#reveal')!
+const keepPainting = document.querySelector<HTMLButtonElement>('#keep-painting')!
+const saveLook = document.querySelector<HTMLButtonElement>('#save-look')!
 
-const makeMask = () => {
-  const canvas = document.createElement('canvas')
-  canvas.width = ART_WIDTH
-  canvas.height = ART_HEIGHT
-  return canvas
+let currentTool = tools[0]
+let brushSize = currentTool.size
+let paintLocked = false
+let painting = false
+let lastPaint: THREE.Vector2 | undefined
+let undoStack: ImageData[] = []
+let toastTimer: number | undefined
+const coreTools = new Set<ToolId>(['blush', 'shadow', 'lip'])
+const exploredTools = new Set<ToolId>()
+let lookComplete = false
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8))
+renderer.outputColorSpace = THREE.SRGBColorSpace
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.16
+
+const scene = new THREE.Scene()
+scene.fog = new THREE.Fog('#2b163f', 7.3, 12)
+const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100)
+camera.position.set(0, 0.45, 7.1)
+const controls = new OrbitControls(camera, canvas)
+controls.target.set(0, 0.42, 0)
+controls.enableDamping = false
+controls.minDistance = 4.2
+controls.maxDistance = 8.1
+controls.minPolarAngle = 1.12
+controls.maxPolarAngle = 2.06
+controls.minAzimuthAngle = -1.05
+controls.maxAzimuthAngle = 1.05
+controls.zoomSpeed = 0.7
+controls.rotateSpeed = 0.58
+controls.touches.ONE = THREE.TOUCH.ROTATE
+controls.touches.TWO = THREE.TOUCH.DOLLY_PAN
+
+const world = new THREE.Group()
+world.position.y = -0.22
+scene.add(world)
+
+const hemi = new THREE.HemisphereLight('#f8d6ff', '#27122d', 2.35)
+scene.add(hemi)
+const keyLight = new THREE.DirectionalLight('#ffe3cb', 3.2)
+keyLight.position.set(-3, 4, 5)
+scene.add(keyLight)
+const rimLight = new THREE.PointLight('#b384ff', 20, 7, 2)
+rimLight.position.set(3.1, 1.8, -2.8)
+scene.add(rimLight)
+const fillLight = new THREE.PointLight('#ff93be', 7, 5, 2)
+fillLight.position.set(-2.8, -0.2, 3.1)
+scene.add(fillLight)
+
+const backdrop = new THREE.Mesh(
+  new THREE.SphereGeometry(8, 48, 32),
+  new THREE.MeshBasicMaterial({ color: '#5b367d', side: THREE.BackSide, transparent: true, opacity: 0.96 }),
+)
+backdrop.position.z = -1.9
+scene.add(backdrop)
+
+const paintCanvas = document.createElement('canvas')
+paintCanvas.width = textureSize
+paintCanvas.height = textureSize
+const paintContext = paintCanvas.getContext('2d', { willReadFrequently: true })!
+const baseTexture = new ImageData(textureSize, textureSize)
+const faceTexture = new THREE.CanvasTexture(paintCanvas)
+faceTexture.colorSpace = THREE.SRGBColorSpace
+faceTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+
+function canvasPoint(u: number, v: number) {
+  return { x: u * textureSize, y: (1 - v) * textureSize }
 }
 
-const targetMask = makeMask()
-const softTargetMask = makeMask()
-const guideTemplate = makeMask()
-const rawBrushMask = makeMask()
-const activeMask = makeMask()
-const lockedMask = makeMask()
-const compositeMask = makeMask()
-const targetCtx = targetMask.getContext('2d')!
-const softTargetCtx = softTargetMask.getContext('2d')!
-const guideTemplateCtx = guideTemplate.getContext('2d')!
-const rawBrushCtx = rawBrushMask.getContext('2d')!
-const activeMaskCtx = activeMask.getContext('2d')!
-const lockedMaskCtx = lockedMask.getContext('2d')!
-const compositeMaskCtx = compositeMask.getContext('2d')!
+function drawBaseTexture() {
+  const gradient = paintContext.createLinearGradient(0, 0, textureSize, textureSize)
+  gradient.addColorStop(0, '#d99b82')
+  gradient.addColorStop(0.38, '#f5c4ad')
+  gradient.addColorStop(0.68, '#f8cbb6')
+  gradient.addColorStop(1, '#cc8b75')
+  paintContext.fillStyle = gradient
+  paintContext.fillRect(0, 0, textureSize, textureSize)
 
-let currentStepIndex = 0
-let samples: Point[] = []
-let targetPixels = new Uint8ClampedArray()
-let covered = new Set<number>()
-let isPainting = false
-let lastPoint: Point | undefined
-let isFinishing = false
-let isFinalLook = false
-let helperTimer: number | undefined
-let selectedPrincess: Princess | undefined
+  // A single, stable UV layout: face lives at U=.25, V=.51. The same map receives paint strokes.
+  const face = canvasPoint(faceU, faceV)
+  paintContext.save()
+  paintContext.translate(face.x, face.y)
+  paintContext.scale(1, -1)
 
-const finishedPortrait = new Image()
+  const shade = paintContext.createRadialGradient(0, 0, 55, 0, 0, 280)
+  shade.addColorStop(0, 'rgba(255,241,225,.28)')
+  shade.addColorStop(1, 'rgba(146,74,70,.17)')
+  paintContext.fillStyle = shade
+  paintContext.beginPath(); paintContext.ellipse(0, 0, 175, 242, 0, 0, Math.PI * 2); paintContext.fill()
 
-const currentStep = () => steps[currentStepIndex]
-const currentPrincess = () => selectedPrincess ?? princesses[0]
-const toolSource = (id: MakeupId) => ASSET_MANIFEST.tools[id]
-const cursorTipOffsets: Record<MakeupId, { x: string; y: string }> = {
-  blush: { x: '-92%', y: '-4%' },
-  shadow: { x: '-87%', y: '-6%' },
-  mascara: { x: '-78%', y: '-5%' },
-  lips: { x: '-75%', y: '-4%' },
-  sparkles: { x: '-91%', y: '-4%' },
-}
-
-const withPath = (context: CanvasRenderingContext2D, step: MakeupStep, fill: boolean) => {
-  const profile = currentPrincess().profile
-  context.save()
-  context.translate(ART_WIDTH / 2 + profile.offsetX, ART_HEIGHT / 2 + profile.offsetY)
-  context.scale(profile.scaleX, profile.scaleY)
-  context.translate(-ART_WIDTH / 2, -ART_HEIGHT / 2)
-  context.beginPath()
-  if (step.id === 'blush') {
-    // These deliberately trace the two pink areas in the finished portrait rather
-    // than using oversized circles, so reveal pixels never spill across the nose,
-    // eyes, or jawline.
-    context.moveTo(278, 659)
-    context.bezierCurveTo(284, 620, 320, 595, 364, 597)
-    context.bezierCurveTo(409, 599, 444, 630, 447, 667)
-    context.bezierCurveTo(447, 704, 411, 731, 365, 735)
-    context.bezierCurveTo(319, 737, 283, 708, 278, 659)
-    context.closePath()
-    context.moveTo(675, 667)
-    context.bezierCurveTo(678, 630, 713, 599, 758, 597)
-    context.bezierCurveTo(802, 595, 838, 620, 844, 659)
-    context.bezierCurveTo(839, 708, 803, 737, 757, 735)
-    context.bezierCurveTo(711, 731, 675, 704, 675, 667)
-    context.closePath()
-  }
-  if (step.id === 'shadow') {
-    context.moveTo(344, 528)
-    context.bezierCurveTo(366, 487, 410, 476, 456, 487)
-    context.bezierCurveTo(480, 493, 500, 510, 510, 530)
-    context.bezierCurveTo(472, 516, 431, 513, 391, 520)
-    context.bezierCurveTo(371, 524, 355, 530, 344, 528)
-    context.closePath()
-    context.moveTo(612, 530)
-    context.bezierCurveTo(622, 510, 642, 493, 666, 487)
-    context.bezierCurveTo(712, 476, 756, 487, 778, 528)
-    context.bezierCurveTo(767, 530, 751, 524, 731, 520)
-    context.bezierCurveTo(691, 513, 650, 516, 612, 530)
-    context.closePath()
-  }
-  if (step.id === 'mascara') {
-    context.moveTo(350, 530); context.quadraticCurveTo(423, 494, 508, 530)
-    context.moveTo(614, 530); context.quadraticCurveTo(699, 494, 772, 530)
-  }
-  if (step.id === 'lips') {
-    context.moveTo(467, 728)
-    context.bezierCurveTo(487, 710, 508, 709, 528, 719)
-    context.bezierCurveTo(545, 705, 566, 705, 582, 719)
-    context.bezierCurveTo(605, 709, 630, 712, 650, 729)
-    context.bezierCurveTo(627, 748, 596, 758, 560, 759)
-    context.bezierCurveTo(525, 758, 493, 747, 467, 728)
-    context.closePath()
-  }
-  if (step.id === 'sparkles') {
-    const stars: Point[] = [
-      { x: 330, y: 602 }, { x: 366, y: 619 }, { x: 399, y: 605 },
-      { x: 723, y: 605 }, { x: 756, y: 619 }, { x: 793, y: 602 },
-    ]
-    stars.forEach(({ x, y }) => {
-      for (let vertex = 0; vertex < 10; vertex += 1) {
-        const angle = -Math.PI / 2 + vertex * Math.PI / 5
-        const radius = vertex % 2 === 0 ? 17 : 7
-        const px = x + Math.cos(angle) * radius
-        const py = y + Math.sin(angle) * radius
-        if (vertex === 0) context.moveTo(px, py)
-        else context.lineTo(px, py)
-      }
-      context.closePath()
-    })
-  }
-  if (step.id === 'mascara') {
-    context.lineCap = 'round'
-    context.lineWidth = fill ? 16 : 10
-    context.stroke()
-  } else if (fill) context.fill()
-  else context.stroke()
-  context.restore()
-}
-
-const drawGuide = (step: MakeupStep) => {
-  guideTemplateCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  guideTemplateCtx.save()
-  guideTemplateCtx.strokeStyle = 'rgba(255, 236, 171, .78)'
-  guideTemplateCtx.shadowColor = '#b8772f'
-  guideTemplateCtx.shadowBlur = 5
-  guideTemplateCtx.lineWidth = step.id === 'mascara' ? 5.5 : 2.4
-  guideTemplateCtx.setLineDash(step.id === 'mascara' ? [8, 11] : [10, 15])
-  withPath(guideTemplateCtx, step, false)
-  guideTemplateCtx.restore()
-  renderGuide()
-}
-
-const renderGuide = () => {
-  const progress = samples.length === 0 ? 0 : covered.size / samples.length
-  guideCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  guideCtx.globalAlpha = Math.max(0.08, 1 - progress * 0.93)
-  guideCtx.drawImage(guideTemplate, 0, 0)
-  guideCtx.globalAlpha = 1
-  guideCtx.globalCompositeOperation = 'destination-out'
-  guideCtx.drawImage(activeMask, 0, 0)
-  guideCtx.globalCompositeOperation = 'source-over'
-}
-
-const drawTargetMask = (step: MakeupStep) => {
-  targetCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  targetCtx.save()
-  targetCtx.fillStyle = '#ffffff'
-  targetCtx.strokeStyle = '#ffffff'
-  withPath(targetCtx, step, true)
-  targetCtx.restore()
-  targetPixels = targetCtx.getImageData(0, 0, ART_WIDTH, ART_HEIGHT).data
-
-  // The hit region stays hard-edged for precise painting and progress scoring.
-  // The image reveal gets a tiny feather, which lets the pre-rendered makeup
-  // blend into the untouched portrait instead of showing a sticker-like edge.
-  softTargetCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  softTargetCtx.save()
-  softTargetCtx.filter = 'blur(6px)'
-  softTargetCtx.drawImage(targetMask, 0, 0)
-  softTargetCtx.restore()
-}
-
-const buildSamples = (step: MakeupStep) => {
-  const spacing = step.id === 'mascara' ? 13 : step.id === 'sparkles' ? 8 : 20
-  const next: Point[] = []
-  for (let y = spacing / 2; y < ART_HEIGHT; y += spacing) {
-    for (let x = spacing / 2; x < ART_WIDTH; x += spacing) {
-      const index = (Math.floor(y) * ART_WIDTH + Math.floor(x)) * 4 + 3
-      if (targetPixels[index] > 200) next.push({ x, y })
-    }
-  }
-  return next
-}
-
-const updateProgress = () => {
-  const percent = samples.length === 0 ? 0 : Math.round((covered.size / samples.length) * 100)
-  progressFill.style.width = `${percent}%`
-  progressValue.textContent = `${percent}%`
-}
-
-const renderReveal = () => {
-  compositeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  compositeMaskCtx.drawImage(lockedMask, 0, 0)
-  compositeMaskCtx.drawImage(activeMask, 0, 0)
-  revealCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  revealCtx.drawImage(finishedPortrait, 0, 0, ART_WIDTH, ART_HEIGHT)
-  revealCtx.globalCompositeOperation = 'destination-in'
-  revealCtx.drawImage(compositeMask, 0, 0)
-  revealCtx.globalCompositeOperation = 'source-over'
-}
-
-const isInsideTarget = (point: Point) => {
-  const x = Math.round(point.x)
-  const y = Math.round(point.y)
-  if (x < 0 || x >= ART_WIDTH || y < 0 || y >= ART_HEIGHT) return false
-  return targetPixels[(y * ART_WIDTH + x) * 4 + 3] > 20
-}
-
-const stamp = (point: Point, strength = 1) => {
-  const step = currentStep()
-  if (!isInsideTarget(point) || isFinishing) return
-  const radius = step.brushSize * strength
-  const gradient = rawBrushCtx.createRadialGradient(point.x, point.y, radius * 0.08, point.x, point.y, radius)
-  gradient.addColorStop(0, 'rgba(255,255,255,1)')
-  gradient.addColorStop(0.68, 'rgba(255,255,255,.94)')
-  gradient.addColorStop(1, 'rgba(255,255,255,0)')
-  rawBrushCtx.fillStyle = gradient
-  rawBrushCtx.beginPath()
-  rawBrushCtx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-  rawBrushCtx.fill()
-
-  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  activeMaskCtx.drawImage(rawBrushMask, 0, 0)
-  activeMaskCtx.globalCompositeOperation = 'destination-in'
-  activeMaskCtx.drawImage(softTargetMask, 0, 0)
-  activeMaskCtx.globalCompositeOperation = 'source-over'
-  renderReveal()
-
-  samples.forEach((sample, index) => {
-    const dx = sample.x - point.x
-    const dy = sample.y - point.y
-    if (dx * dx + dy * dy <= radius * radius * 0.72) covered.add(index)
+  // Brows and natural definition are baked into the base skin layer, while cosmetics remain editable on top.
+  paintContext.strokeStyle = 'rgba(77,42,47,.62)'
+  paintContext.lineCap = 'round'
+  paintContext.lineWidth = 10
+  ;[-73, 73].forEach((x) => {
+    paintContext.beginPath()
+    paintContext.moveTo(x - 39 * Math.sign(x), 72)
+    paintContext.quadraticCurveTo(x, 88, x + 39 * Math.sign(x), 74)
+    paintContext.stroke()
   })
+  paintContext.fillStyle = 'rgba(178,82,105,.34)'
+  paintContext.beginPath(); paintContext.ellipse(0, -79, 36, 12, 0, 0, Math.PI * 2); paintContext.fill()
+  paintContext.restore()
+  baseTexture.data.set(paintContext.getImageData(0, 0, textureSize, textureSize).data)
+  faceTexture.needsUpdate = true
+}
+
+drawBaseTexture()
+
+const skinMaterial = new THREE.MeshStandardMaterial({
+  map: faceTexture,
+  color: '#fff8f1',
+  roughness: 0.6,
+  metalness: 0,
+})
+const headGeometry = new THREE.SphereGeometry(1, 96, 72)
+const head = new THREE.Mesh(headGeometry, skinMaterial)
+head.name = 'Paintable UV face'
+head.scale.set(1.21, 1.42, 1.08)
+head.position.y = 0.6
+world.add(head)
+
+const skinDetail = new THREE.MeshStandardMaterial({ color: '#e7a58e', roughness: 0.68 })
+const warmSkin = new THREE.MeshStandardMaterial({ color: '#f0b39d', roughness: 0.6 })
+const darkHair = new THREE.MeshPhysicalMaterial({ color: '#542b4b', roughness: 0.3, metalness: 0.05, clearcoat: 0.22, clearcoatRoughness: 0.25 })
+const hairHigh = new THREE.MeshPhysicalMaterial({ color: '#9c596f', roughness: 0.35, metalness: 0.04, clearcoat: 0.3 })
+const white = new THREE.MeshStandardMaterial({ color: '#fff9f4', roughness: 0.43 })
+const iris = new THREE.MeshPhysicalMaterial({ color: '#4b7895', roughness: 0.22, clearcoat: 0.45 })
+const pupil = new THREE.MeshStandardMaterial({ color: '#211b2b', roughness: 0.35 })
+const gold = new THREE.MeshPhysicalMaterial({ color: '#f5bc65', metalness: 0.72, roughness: 0.24, clearcoat: 0.25 })
+const pearl = new THREE.MeshPhysicalMaterial({ color: '#fff0da', metalness: 0.08, roughness: 0.22, clearcoat: 0.45 })
+const lipMaterial = new THREE.MeshPhysicalMaterial({ color: '#c96481', roughness: 0.27, clearcoat: 0.45, clearcoatRoughness: 0.16 })
+const browMaterial = new THREE.MeshPhysicalMaterial({ color: '#4c293a', roughness: 0.48, clearcoat: 0.08 })
+const lashMaterial = new THREE.MeshPhysicalMaterial({ color: '#291c2a', roughness: 0.42 })
+
+function ellipsoid(geometry: THREE.BufferGeometry, material: THREE.Material, position: [number, number, number], scale: [number, number, number], parent = world) {
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.position.set(...position)
+  mesh.scale.set(...scale)
+  parent.add(mesh)
+  return mesh
+}
+
+// Neck and shoulders give the head a complete portrait silhouette without competing with the paint surface.
+ellipsoid(new THREE.CylinderGeometry(0.43, 0.48, 1.25, 32), warmSkin, [0, -1.12, -0.02], [1, 1, 0.96])
+ellipsoid(new THREE.SphereGeometry(1, 48, 32), new THREE.MeshStandardMaterial({ color: '#8f5a91', roughness: 0.57 }), [0, -2.02, -0.14], [1.72, 0.53, 0.86])
+
+// Eyes sit proud of the UV face. Their whites and irises retain a polished, dimensional look at mobile zoom.
+for (const x of [-0.42, 0.42]) {
+  ellipsoid(new THREE.SphereGeometry(1, 36, 24), white, [x, 0.82, 0.96], [0.285, 0.19, 0.105])
+  ellipsoid(new THREE.SphereGeometry(1, 32, 20), iris, [x, 0.82, 1.07], [0.125, 0.125, 0.042])
+  ellipsoid(new THREE.SphereGeometry(1, 28, 18), pupil, [x, 0.82, 1.115], [0.052, 0.058, 0.019])
+  ellipsoid(new THREE.SphereGeometry(1, 16, 12), pearl, [x - 0.035, 0.865, 1.14], [0.021, 0.027, 0.008])
+
+  const direction = Math.sign(x)
+  const browCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(x - direction * 0.27, 1.14, 1.0),
+    new THREE.Vector3(x, 1.23, 1.08),
+    new THREE.Vector3(x + direction * 0.25, 1.15, 1.0),
+  ])
+  world.add(new THREE.Mesh(new THREE.TubeGeometry(browCurve, 18, 0.032, 8, false), browMaterial))
+
+  const lashCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(x - direction * 0.24, 0.89, 1.12),
+    new THREE.Vector3(x, 0.98, 1.17),
+    new THREE.Vector3(x + direction * 0.23, 0.89, 1.12),
+  ])
+  world.add(new THREE.Mesh(new THREE.TubeGeometry(lashCurve, 18, 0.018, 6, false), lashMaterial))
+}
+
+ellipsoid(new THREE.SphereGeometry(1, 32, 24), skinDetail, [0, 0.39, 1.055], [0.12, 0.2, 0.11])
+ellipsoid(new THREE.SphereGeometry(1, 28, 18), lipMaterial, [-0.1, 0.03, 1.045], [0.19, 0.055, 0.045])
+ellipsoid(new THREE.SphereGeometry(1, 28, 18), lipMaterial, [0.1, 0.03, 1.045], [0.19, 0.055, 0.045])
+ellipsoid(new THREE.SphereGeometry(1, 20, 16), skinDetail, [-1.17, 0.55, 0], [0.11, 0.18, 0.06])
+ellipsoid(new THREE.SphereGeometry(1, 20, 16), skinDetail, [1.17, 0.55, 0], [0.11, 0.18, 0.06])
+
+// Voluminous hair is modelled as a back cap plus individually curved strands, so it holds up from any orbit angle.
+ellipsoid(new THREE.SphereGeometry(1, 72, 48), darkHair, [0, 0.92, -0.18], [1.34, 1.53, 1.04])
+for (let index = 0; index < 9; index += 1) {
+  const t = index / 8
+  const x = -1.02 + t * 2.04
+  const side = Math.sign(x || 1)
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(x * 0.84, 1.84 - 0.13 * Math.abs(x), 0.51),
+    new THREE.Vector3(x * 1.02, 1.43, 0.86),
+    new THREE.Vector3(x * 0.83 + side * 0.11, 1.06 + (index % 2) * 0.06, 1.04),
+  ])
+  const strand = new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 0.102 - Math.abs(index - 4) * 0.005, 10, false), index % 2 === 0 ? darkHair : hairHigh)
+  world.add(strand)
+}
+for (const x of [-0.72, -0.36, 0, 0.36, 0.72]) {
+  const curl = ellipsoid(new THREE.SphereGeometry(1, 32, 20), x === 0 ? hairHigh : darkHair, [x, 1.44 - Math.abs(x) * 0.17, 0.81], [0.34, 0.24, 0.15])
+  curl.rotation.z = x * -0.33
+}
+
+// Tiara and gems provide the recognisable princess cue, while staying original to this model.
+const tiara = new THREE.Group()
+tiara.position.set(0, 1.72, 0.7)
+world.add(tiara)
+const crownCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-0.74, -0.04, 0), new THREE.Vector3(-0.38, 0.18, 0.06), new THREE.Vector3(0, 0.28, 0.08), new THREE.Vector3(0.38, 0.18, 0.06), new THREE.Vector3(0.74, -0.04, 0),
+])
+tiara.add(new THREE.Mesh(new THREE.TubeGeometry(crownCurve, 32, 0.035, 10, false), gold))
+for (const [x, y, s] of [[-0.36, 0.17, 0.075], [0, 0.31, 0.11], [0.36, 0.17, 0.075]] as const) {
+  ellipsoid(new THREE.OctahedronGeometry(1, 1), pearl, [x, y, 0.075], [s, s * 1.28, s], tiara)
+}
+
+const raycaster = new THREE.Raycaster()
+const pointer = new THREE.Vector2()
+const targetCamera = new THREE.Vector3(0, 0.45, 7.1)
+const targetLookAt = new THREE.Vector3(0, 0.42, 0)
+
+function resize() {
+  const rect = canvas.getBoundingClientRect()
+  renderer.setSize(rect.width, rect.height, false)
+  camera.aspect = rect.width / rect.height
+  camera.updateProjectionMatrix()
+}
+
+function toolButton(tool: Tool, compact = false) {
+  return `<button class="tool-button${tool.id === currentTool.id ? ' active' : ''}" type="button" data-tool="${tool.id}" aria-pressed="${tool.id === currentTool.id}">
+    <i style="--swatch:${tool.color}"></i><span>${compact ? tool.eyebrow : tool.label}</span>${compact ? '' : `<small>${tool.eyebrow}</small>`}
+  </button>`
+}
+
+function updateToolUI() {
+  toolList.innerHTML = tools.map((tool) => toolButton(tool)).join('')
+  mobileToolStrip.innerHTML = tools.map((tool) => toolButton(tool, true)).join('')
+  finishTitle.textContent = currentTool.label
+  mobileToolName.textContent = currentTool.label
+  brushOutput.value = String(brushSize)
+  brushInput.value = String(brushSize)
+  opacityStatus.textContent = `${Math.round(currentTool.opacity * 100)}%`
+  swatchRow.innerHTML = tools.map((tool) => `<button type="button" data-tool="${tool.id}" class="material-swatch${tool.id === currentTool.id ? ' selected' : ''}" style="--swatch:${tool.color}" aria-label="Use ${tool.label}"></button>`).join('')
+}
+
+function updateProgress() {
+  const completed = [...coreTools].filter((id) => exploredTools.has(id)).length
+  progressLabel.textContent = lookComplete ? 'Look complete' : `${completed} / 3 touches`
+  lookProgress.classList.toggle('complete', lookComplete)
+}
+
+function completeLook() {
+  if (lookComplete) return
+  lookComplete = true
   updateProgress()
-  renderGuide()
-  clearHelperTimer()
-  if (covered.size / samples.length >= 0.86) finishStep()
-  else scheduleHelper()
-}
-
-const stampLine = (from: Point, to: Point) => {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y)
-  const parts = Math.max(1, Math.ceil(distance / (currentStep().brushSize * 0.38)))
-  for (let part = 0; part <= parts; part += 1) {
-    stamp({ x: from.x + (to.x - from.x) * (part / parts), y: from.y + (to.y - from.y) * (part / parts) })
-  }
-}
-
-const clearHelperTimer = () => {
-  if (helperTimer !== undefined) window.clearTimeout(helperTimer)
-  helperTimer = undefined
-}
-
-const remainingPoints = () => samples
-  .map((point, index) => ({ point, index }))
-  .filter(({ index }) => !covered.has(index))
-
-const useMagicHelp = (amount = 7) => {
-  if (isFinishing) return
-  const remaining = remainingPoints()
-  remaining.slice(0, amount).forEach(({ point }, index) => {
-    window.setTimeout(() => stamp(point, 0.82), index * 90)
-  })
-  instruction.textContent = 'A tiny fairy is helping with the tricky spots!'
-  window.setTimeout(() => { if (!isFinishing) instruction.textContent = currentStep().instruction }, 1150)
-}
-
-const scheduleHelper = () => {
-  clearHelperTimer()
-  if (covered.size < 3) return
-  helperTimer = window.setTimeout(() => useMagicHelp(3), 2800)
-}
-
-const createSparkleBurst = () => {
-  sparkleField.replaceChildren()
-  for (let index = 0; index < 22; index += 1) {
-    const sparkle = document.createElement('i')
-    sparkle.textContent = index % 3 === 0 ? '✦' : '✧'
-    sparkle.style.left = `${23 + Math.random() * 54}%`
-    sparkle.style.top = `${31 + Math.random() * 28}%`
-    sparkle.style.animationDelay = `${index * 25}ms`
-    sparkleField.append(sparkle)
-  }
-  sparkleField.classList.add('burst')
-  window.setTimeout(() => { sparkleField.classList.remove('burst'); sparkleField.replaceChildren() }, 1050)
-}
-
-const finishStep = () => {
-  if (isFinishing) return
-  isFinishing = true
-  clearHelperTimer()
-  lockedMaskCtx.drawImage(softTargetMask, 0, 0)
-  rawBrushCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  covered = new Set(samples.map((_, index) => index))
-  updateProgress()
-  renderReveal()
-  guideCanvas.classList.add('guide-hidden')
-  toolCursor.classList.remove('shown')
-  createSparkleBurst()
-  instruction.textContent = `Perfect! ${currentStep().name} is complete.`
   window.setTimeout(() => {
-    if (currentStepIndex === steps.length - 1) {
-      isFinalLook = true
-      gameShell.classList.add('final-look')
-      toolCursor.classList.remove('shown')
-      return
-    }
-    currentStepIndex += 1
-    isFinishing = false
-    prepareStep()
-  }, 980)
+    reveal.classList.add('visible')
+    reveal.setAttribute('aria-hidden', 'false')
+  }, 500)
 }
 
-const renderTray = () => {
-  toolTray.innerHTML = steps.map((step, index) => `
-    <div class="tool ${index === currentStepIndex ? 'active' : ''} ${index < currentStepIndex ? 'done' : ''}" aria-current="${index === currentStepIndex ? 'step' : 'false'}">
-      <img src="${toolSource(step.id)}" alt="" />
-      <span>${step.label}</span>
-      ${index < currentStepIndex ? '<b>✓</b>' : ''}
-    </div>`).join('')
-}
-
-const prepareStep = () => {
-  const step = currentStep()
-  guideCanvas.classList.remove('guide-hidden')
-  rawBrushCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  activeMaskCtx.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  drawTargetMask(step)
-  drawGuide(step)
-  samples = buildSamples(step)
-  covered = new Set()
-  stepCounter.innerHTML = `${currentStepIndex + 1} <small>of</small> ${steps.length}`
-  stepName.textContent = step.name
-  instruction.textContent = step.instruction
-  progressLabel.textContent = step.label
-  activeToolImage.src = toolSource(step.id)
-  cursorImage.src = toolSource(step.id)
-  toolCursor.style.setProperty('--tip-x', cursorTipOffsets[step.id].x)
-  toolCursor.style.setProperty('--tip-y', cursorTipOffsets[step.id].y)
-  renderTray()
+function recordPaintedTool() {
+  if (!coreTools.has(currentTool.id) || exploredTools.has(currentTool.id)) return
+  exploredTools.add(currentTool.id)
   updateProgress()
-  renderReveal()
+  if (exploredTools.size === coreTools.size) completeLook()
 }
 
-const clearMakeupState = () => {
-  clearHelperTimer()
-  currentStepIndex = 0
-  samples = []
-  covered = new Set()
-  targetPixels = new Uint8ClampedArray()
-  isPainting = false
-  lastPoint = undefined
-  isFinishing = false
-  isFinalLook = false
-  ;[targetCtx, softTargetCtx, guideTemplateCtx, rawBrushCtx, activeMaskCtx, lockedMaskCtx, compositeMaskCtx, revealCtx, guideCtx].forEach((context) => {
-    context.clearRect(0, 0, ART_WIDTH, ART_HEIGHT)
-  })
-  sparkleField.replaceChildren()
-  sparkleField.classList.remove('burst')
-  toolCursor.classList.remove('shown')
+function selectTool(id: ToolId) {
+  const next = tools.find((tool) => tool.id === id)
+  if (!next) return
+  currentTool = next
+  brushSize = next.size
+  updateToolUI()
+  if (paintLocked) showToast(`${next.label} ready`)
 }
 
-const renderCharacterPicker = () => {
-  characterGrid.innerHTML = princesses.map((princess) => `
-    <button class="character-card" type="button" data-princess-id="${princess.id}" aria-label="Choose ${princess.name}">
-      <img src="${princess.base}" alt="" />
-      <span><b>${princess.name}</b><small>${princess.subtitle}</small></span>
-    </button>`).join('')
+function showToast(message: string) {
+  toast.textContent = message
+  toast.classList.add('visible')
+  window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => toast.classList.remove('visible'), 1400)
 }
 
-const openCharacterPicker = () => {
-  clearMakeupState()
-  characterPicker.hidden = false
-  gameShell.classList.remove('final-look')
-  gameShell.classList.add('selecting')
+function saveUndo() {
+  if (undoStack.length > 9) undoStack.shift()
+  undoStack.push(paintContext.getImageData(0, 0, textureSize, textureSize))
+  undoButton.disabled = false
+  mobileUndo.disabled = false
 }
 
-const selectPrincess = (princess: Princess) => {
-  selectedPrincess = princess
-  clearMakeupState()
-  portraitImage.src = princess.base
-  portraitImage.alt = `${princess.name} ready for makeup`
-  sceneBackdrop.src = princess.base
-  characterPicker.hidden = true
+function refreshTexture() {
+  faceTexture.needsUpdate = true
+  textureStatus.textContent = undoStack.length ? 'Edited' : 'Ready'
+}
 
-  let ready = false
-  const beginGame = () => {
-    if (ready) return
-    ready = true
-    gameShell.classList.remove('selecting', 'final-look')
-    prepareStep()
+function clearTexture(pushUndo = true) {
+  if (pushUndo) saveUndo()
+  paintContext.putImageData(baseTexture, 0, 0)
+  refreshTexture()
+}
+
+function resetLook() {
+  undoStack = []
+  undoButton.disabled = true
+  mobileUndo.disabled = true
+  clearTexture(false)
+  exploredTools.clear()
+  lookComplete = false
+  updateProgress()
+  reveal.classList.remove('visible')
+  reveal.setAttribute('aria-hidden', 'true')
+}
+
+function undo() {
+  const snapshot = undoStack.pop()
+  if (!snapshot) return
+  paintContext.putImageData(snapshot, 0, 0)
+  undoButton.disabled = undoStack.length === 0
+  mobileUndo.disabled = undoStack.length === 0
+  refreshTexture()
+  showToast('Last stroke undone')
+}
+
+function paintDot(uv: THREE.Vector2) {
+  const { x, y } = canvasPoint(uv.x, uv.y)
+  const radius = currentTool.id === 'freckles' ? Math.max(5, brushSize * 0.18) : brushSize
+  const strength = currentTool.id === 'freckles' ? 0.76 : 1
+  const bloom = paintContext.createRadialGradient(x, y, radius * 0.08, x, y, radius)
+  bloom.addColorStop(0, `${currentTool.color}${Math.round(currentTool.opacity * 255 * strength).toString(16).padStart(2, '0')}`)
+  bloom.addColorStop(0.52, `${currentTool.color}${Math.round(currentTool.opacity * 160 * strength).toString(16).padStart(2, '0')}`)
+  bloom.addColorStop(1, `${currentTool.color}00`)
+  paintContext.save()
+  paintContext.globalCompositeOperation = currentTool.blend ?? 'source-over'
+  paintContext.fillStyle = bloom
+  paintContext.beginPath()
+  paintContext.arc(x, y, radius, 0, Math.PI * 2)
+  paintContext.fill()
+  if (currentTool.id === 'freckles') {
+    paintContext.fillStyle = `${currentTool.color}8f`
+    for (let index = 0; index < 5; index += 1) {
+      const angle = index * 2.39
+      const distance = radius * (0.22 + (index % 3) * 0.13)
+      paintContext.beginPath()
+      paintContext.arc(x + Math.cos(angle) * distance, y + Math.sin(angle) * distance, 1.7 + (index % 2), 0, Math.PI * 2)
+      paintContext.fill()
+    }
   }
-  finishedPortrait.onload = beginGame
-  finishedPortrait.src = princess.finished
-  if (finishedPortrait.complete) beginGame()
+  paintContext.restore()
 }
 
-const toImagePoint = (event: PointerEvent): Point => {
-  const rect = stage.getBoundingClientRect()
-  return {
-    x: ((event.clientX - rect.left) / rect.width) * ART_WIDTH,
-    y: ((event.clientY - rect.top) / rect.height) * ART_HEIGHT,
-  }
+function isPaintable(uv: THREE.Vector2) {
+  const uDistance = Math.abs(uv.x - faceU)
+  const vDistance = Math.abs(uv.y - faceV)
+  return uDistance < 0.19 && vDistance < 0.265
 }
 
-const moveToolCursor = (event: PointerEvent) => {
-  if (isFinishing || isFinalLook) {
-    toolCursor.classList.remove('shown')
+function paintAt(event: PointerEvent) {
+  const rect = canvas.getBoundingClientRect()
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+  raycaster.setFromCamera(pointer, camera)
+  const hit = raycaster.intersectObject(head, false)[0]
+  if (!hit?.uv || !isPaintable(hit.uv)) return false
+  const uv = hit.uv
+  if (lastPaint) {
+    const distance = lastPaint.distanceTo(uv)
+    const spacing = Math.max(0.0028, brushSize / textureSize * 0.22)
+    const steps = Math.ceil(distance / spacing)
+    for (let index = 1; index <= steps; index += 1) paintDot(lastPaint.clone().lerp(uv, index / steps))
+  } else paintDot(uv)
+  lastPaint = uv.clone()
+  recordPaintedTool()
+  refreshTexture()
+  return true
+}
+
+function setPaintLock(next: boolean, quiet = false) {
+  paintLocked = next
+  controls.enabled = !next
+  lockButton.setAttribute('aria-pressed', String(next))
+  lockButton.setAttribute('aria-label', next ? 'Unlock camera' : 'Lock camera for painting')
+  document.querySelector('.studio-shell')!.classList.toggle('paint-locked', next)
+  const compactControl = window.matchMedia('(max-width: 680px)').matches
+  lockLabel.textContent = next ? (compactControl ? 'Unlock' : 'Unlock camera') : (compactControl ? 'Paint' : 'Lock to paint')
+  modeReadout.innerHTML = next ? '<i></i><span>Paint mode active</span>' : '<i></i><span>Explore the face</span>'
+  paintModeLabel.classList.toggle('visible', next)
+  touchHint.classList.toggle('hidden', next)
+  if (next) {
+    targetCamera.set(0, 0.45, compactControl ? 7.1 : 6.15)
+    targetLookAt.set(0, 0.42, 0)
+    if (!quiet) showToast('Camera locked — paint the face')
+  } else if (!quiet) showToast('Camera unlocked — explore freely')
+}
+
+function centerFront() {
+  targetCamera.set(0, 0.45, paintLocked && window.innerWidth > 680 ? 6.15 : 7.1)
+  targetLookAt.set(0, 0.42, 0)
+  camera.position.copy(targetCamera)
+  controls.target.copy(targetLookAt)
+  controls.update()
+  showToast('Front view centered')
+}
+
+function zoom(direction: number) {
+  const toward = camera.position.clone().sub(controls.target).normalize()
+  const distance = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) - direction * 0.55, controls.minDistance, controls.maxDistance)
+  camera.position.copy(controls.target).add(toward.multiplyScalar(distance))
+  targetCamera.copy(camera.position)
+  controls.update()
+}
+
+canvas.addEventListener('pointerdown', (event) => {
+  if (!paintLocked) return
+  event.preventDefault()
+  lastPaint = undefined
+  // Snapshot before the first dab, so Undo restores the genuine pre-stroke texture.
+  saveUndo()
+  if (!paintAt(event)) {
+    undoStack.pop()
+    undoButton.disabled = undoStack.length === 0
+    mobileUndo.disabled = undoStack.length === 0
     return
   }
-  toolCursor.style.left = `${event.clientX}px`
-  toolCursor.style.top = `${event.clientY}px`
-  toolCursor.classList.add('shown')
+  painting = true
+  canvas.setPointerCapture(event.pointerId)
+})
+canvas.addEventListener('pointermove', (event) => {
+  if (!paintLocked || !painting) return
+  event.preventDefault()
+  paintAt(event)
+})
+canvas.addEventListener('pointerup', () => { painting = false; lastPaint = undefined })
+canvas.addEventListener('pointercancel', () => { painting = false; lastPaint = undefined })
+canvas.addEventListener('pointermove', (event) => {
+  if (!paintLocked) return
+  paintIndicator.style.left = `${event.clientX}px`
+  paintIndicator.style.top = `${event.clientY}px`
+  paintIndicator.style.width = `${Math.max(24, brushSize * canvas.clientWidth / textureSize * 2)}px`
+  paintIndicator.style.height = paintIndicator.style.width
+  paintIndicator.classList.toggle('shown', !painting)
+})
+canvas.addEventListener('pointerleave', () => paintIndicator.classList.remove('shown'))
+
+toolList.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool]')
+  if (button) selectTool(button.dataset.tool as ToolId)
+})
+mobileToolStrip.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool]')
+  if (button) selectTool(button.dataset.tool as ToolId)
+})
+swatchRow.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool]')
+  if (button) selectTool(button.dataset.tool as ToolId)
+})
+brushInput.addEventListener('input', () => {
+  brushSize = Number(brushInput.value)
+  brushOutput.value = String(brushSize)
+})
+lockButton.addEventListener('click', () => setPaintLock(!paintLocked))
+document.querySelector<HTMLButtonElement>('#front-view')!.addEventListener('click', centerFront)
+document.querySelector<HTMLButtonElement>('#zoom-in')!.addEventListener('click', () => zoom(1))
+document.querySelector<HTMLButtonElement>('#zoom-out')!.addEventListener('click', () => zoom(-1))
+undoButton.addEventListener('click', undo)
+mobileUndo.addEventListener('click', undo)
+clearButton.addEventListener('click', () => { resetLook(); showToast('Face texture reset') })
+mobileClear.addEventListener('click', () => { resetLook(); showToast('Face texture reset') })
+document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', () => { resetLook(); centerFront(); showToast('Fresh face ready') })
+keepPainting.addEventListener('click', () => {
+  reveal.classList.remove('visible')
+  reveal.setAttribute('aria-hidden', 'true')
+  showToast('Add your finishing touches')
+})
+saveLook.addEventListener('click', () => {
+  const link = document.createElement('a')
+  link.download = 'luma-princess-look.png'
+  link.href = renderer.domElement.toDataURL('image/png')
+  link.click()
+  showToast('Look saved')
+})
+
+window.addEventListener('resize', resize)
+resize()
+updateToolUI()
+updateProgress()
+
+function render() {
+  if (paintLocked) {
+    camera.position.lerp(targetCamera, 0.12)
+    controls.target.lerp(targetLookAt, 0.12)
+    camera.lookAt(controls.target)
+  } else controls.update()
+  world.rotation.y = THREE.MathUtils.lerp(world.rotation.y, 0, 0.025)
+  renderer.render(scene, camera)
+  requestAnimationFrame(render)
 }
 
-paintCanvas.addEventListener('pointerdown', (event) => {
-  if (isFinalLook) return
-  paintCanvas.setPointerCapture(event.pointerId)
-  isPainting = true
-  moveToolCursor(event)
-  lastPoint = toImagePoint(event)
-  stamp(lastPoint)
-})
-
-paintCanvas.addEventListener('pointermove', (event) => {
-  moveToolCursor(event)
-  if (!isPainting || !lastPoint) return
-  const next = toImagePoint(event)
-  stampLine(lastPoint, next)
-  lastPoint = next
-})
-
-const stopPainting = () => {
-  isPainting = false
-  lastPoint = undefined
-  clearHelperTimer()
-  toolCursor.classList.remove('shown')
-}
-
-paintCanvas.addEventListener('pointerup', stopPainting)
-paintCanvas.addEventListener('pointercancel', stopPainting)
-paintCanvas.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') toolCursor.classList.remove('shown') })
-paintCanvas.addEventListener('pointerenter', moveToolCursor)
-
-characterGrid.addEventListener('click', (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-princess-id]')
-  const princess = princesses.find(({ id }) => id === button?.dataset.princessId)
-  if (princess) selectPrincess(princess)
-})
-
-document.querySelector<HTMLButtonElement>('#magic-help')!.addEventListener('click', () => useMagicHelp(7))
-document.querySelector<HTMLButtonElement>('#reset-button')!.addEventListener('click', openCharacterPicker)
-finalClose.addEventListener('click', openCharacterPicker)
-
-// Safari can turn a two-finger painting gesture into a page zoom.  The game has
-// no scrollable surface, so keep touch gestures inside the canvas and preserve
-// one-finger tapping/painting for the controls and portrait.
-document.addEventListener('touchmove', (event) => {
-  if (event.touches.length > 1) event.preventDefault()
-}, { passive: false })
-;(['gesturestart', 'gesturechange', 'gestureend'] as const).forEach((eventName) => {
-  document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false })
-})
-
-renderCharacterPicker()
+render()
